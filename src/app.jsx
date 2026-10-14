@@ -9,7 +9,7 @@ const SUPABASE_URL = "https://lfpqetfasjqnucklvwah.supabase.co";
 // livraison, en même temps que le cache-buster ?v=... d'index.html, pour pouvoir
 // vérifier en un coup d'œil dans l'app elle-même quelle version tourne réellement,
 // sans avoir besoin des outils développeur (peu pratiques sur mobile).
-const APP_VERSION = "20260830-210";
+const APP_VERSION = "20260830-211";
 const SUPABASE_ANON_KEY = "sb_publishable_dQ2C3wy2LikR2IY2BgSrlQ_Go9Gj9Da";
 let _supabaseClient = null;
 function supabaseClient() {
@@ -6866,6 +6866,40 @@ function fxBuildSettleEntry(doc, foreignAmount, rate, date, cashAccount, label) 
   }
   return { id: uid(), date, createdAt: new Date().toISOString(), label, lines, fx: { type: "settle", docId: doc.docId, kind: doc.kind, currency: doc.currency, amount: foreignAmount, rate, carry, diff, party: doc.party } };
 }
+// K:FXC:START
+// Compte en dollars (USD) : achat / vente de devises à la banque, valorisé en gourdes au coût réel
+// (coût moyen pondéré). Les montants de coût sont figés dans chaque écriture (`fxc`), donc une
+// annulation d'une opération ancienne ne réécrit pas les écritures suivantes.
+const FX_USD_ACCOUNT = { code: "5121", name: "Banque — compte en dollars (USD)", type: "Actif" };
+const FX_BANKFEE_ACCOUNT = { code: "627", name: "Frais bancaires", type: "Charge" };
+function fxcPosition(entries) {
+  let usd = 0, cost = 0;
+  (entries || []).forEach((e) => {
+    if (!e.fxc || e.cancelledBy || e.reversalOf) return;
+    const f = e.fxc;
+    if (f.type === "buy") { usd = fxR2(usd + f.usd); cost = fxR2(cost + f.cost); }
+    else if (f.type === "sell" || f.type === "spend") { usd = fxR2(usd - f.usd); cost = fxR2(cost - f.costOut); }
+  });
+  return { usd, cost, avg: usd > 0.004 ? cost / usd : 0 };
+}
+function fxcCostOut(pos, usd) { return usd >= pos.usd - 0.005 ? pos.cost : fxR2(pos.cost * usd / pos.usd); }
+function fxcBuildBuy({ usd, rate, commission, source, date, label, mkId, nowIso }) {
+  const cost = fxR2(usd * rate), fee = fxR2(commission || 0);
+  const lines = [{ account: FX_USD_ACCOUNT.code, debit: cost, credit: 0 }];
+  if (fee > 0) lines.push({ account: FX_BANKFEE_ACCOUNT.code, debit: fee, credit: 0 });
+  lines.push({ account: source, debit: 0, credit: fxR2(cost + fee) });
+  return { id: mkId(), date, createdAt: nowIso, label, lines, fxc: { type: "buy", usd, rate, cost, commission: fee, source } };
+}
+function fxcBuildSell({ usd, rate, commission, target, date, label, pos, mkId, nowIso }) {
+  const costOut = fxcCostOut(pos, usd), proceeds = fxR2(usd * rate), fee = fxR2(commission || 0), diff = fxR2(proceeds - costOut);
+  const lines = [{ account: target, debit: fxR2(proceeds - fee), credit: 0 }];
+  if (fee > 0) lines.push({ account: FX_BANKFEE_ACCOUNT.code, debit: fee, credit: 0 });
+  if (diff < 0) lines.push({ account: FX_LOSS_ACCOUNT.code, debit: -diff, credit: 0 });
+  lines.push({ account: FX_USD_ACCOUNT.code, debit: 0, credit: costOut });
+  if (diff > 0) lines.push({ account: FX_GAIN_ACCOUNT.code, debit: 0, credit: diff });
+  return { id: mkId(), date, createdAt: nowIso, label, lines, fxc: { type: "sell", usd, rate, costOut, proceeds, commission: fee, diff, target } };
+}
+// K:FXC:END
 const fmtFx = (n, cur) => {
   try { return new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0); }
   catch (e) { return `${fxR2(n || 0)} ${cur}`; }
@@ -6914,6 +6948,13 @@ function DevisesPanel({ accounts, setAccounts, entries, setEntries, settings, se
     setAccounts((prev) => {
       let next = prev;
       [FX_GAIN_ACCOUNT, FX_LOSS_ACCOUNT].forEach((a) => { if (!next.some((x) => x.code === a.code)) next = [...next, a]; });
+      return next;
+    });
+  };
+  const ensureUsdAccounts = (withGainLoss) => {
+    setAccounts((prev) => {
+      let next = prev;
+      [FX_USD_ACCOUNT, FX_BANKFEE_ACCOUNT, ...(withGainLoss ? [FX_GAIN_ACCOUNT, FX_LOSS_ACCOUNT] : [])].forEach((a) => { if (!next.some((x) => x.code === a.code)) next = [...next, a]; });
       return next;
     });
   };
@@ -6966,7 +7007,11 @@ function DevisesPanel({ accounts, setAccounts, entries, setEntries, settings, se
 
   const settleDoc = docs.find((d) => d.docId === settleFor);
   const sAmount = Number(settleForm.amount) || 0;
-  const sRate = settleForm.rate !== "" ? Number(settleForm.rate) : (settleDoc ? fxRateOn(rates, settleDoc.currency, settleForm.date) : null);
+  const usdPos = fxcPosition(entries);
+  const sRateInput = settleForm.rate !== "" ? Number(settleForm.rate) : (settleDoc ? fxRateOn(rates, settleDoc.currency, settleForm.date) : null);
+  // Paiement d'un fournisseur depuis le compte en dollars : les dollars sortent au coût moyen réel, pas au taux du jour.
+  const usdSpend = !!settleDoc && settleForm.cash === FX_USD_ACCOUNT.code && settleDoc.kind === "dette";
+  const sRate = usdSpend ? (usdPos.avg > 0 ? usdPos.avg : null) : sRateInput;
   const sPlan = settleDoc && sAmount > 0 && sRate > 0 ? fxSettlePlan(settleDoc, sAmount, sRate) : null;
   const startSettle = (d) => {
     setSettleFor(d.docId);
@@ -6977,11 +7022,17 @@ function DevisesPanel({ accounts, setAccounts, entries, setEntries, settings, se
     lastSubmitRef.current = Date.now();
     if (!canEdit || !settleDoc) return;
     if (!(sAmount > 0) || sAmount > settleDoc.remainingForeign + 0.005) { showToast(`Le montant doit être compris entre 0 et ${fmtFx(settleDoc.remainingForeign, settleDoc.currency)}.`); return; }
-    if (!(sRate > 0)) { showToast("Saisissez le taux de change du règlement."); return; }
+    if (usdSpend && sAmount > usdPos.usd + 0.005) { showToast(`Solde insuffisant sur le compte en dollars : ${fmtFx(usdPos.usd, "USD")} disponibles. Achetez d'abord des dollars (cadre « Achat et vente de dollars »).`); return; }
+    if (!(sRate > 0)) { showToast(usdSpend ? "Le compte en dollars est vide : achetez d'abord des dollars." : "Saisissez le taux de change du règlement."); return; }
     if (!guardDate(settleForm.date)) return;
     if (settleForm.date < settleDoc.date) { showToast("La date du règlement ne peut pas précéder celle de l'opération."); return; }
     const label = `Règlement ${settleDoc.kind === "creance" ? "client" : "fournisseur"} — ${settleDoc.party} — ${fmtFx(sAmount, settleDoc.currency)} × ${fmtRate(sRate)}`;
     const entry = fxBuildSettleEntry(settleDoc, sAmount, sRate, settleForm.date, settleForm.cash, label);
+    if (settleForm.cash === FX_USD_ACCOUNT.code) {
+      const cash = fxSettlePlan(settleDoc, sAmount, sRate).cash;
+      entry.fxc = usdSpend ? { type: "spend", usd: sAmount, costOut: cash } : { type: "buy", usd: sAmount, rate: sRate, cost: cash, commission: 0, source: "411" };
+      ensureUsdAccounts();
+    }
     if (entry.fx.diff !== 0) ensureFxAccounts();
     setEntries((prev) => [...prev, entry]);
     logAudit("Comptabilité", "Règlement en devise", `${label} — écart de change ${fmt(entry.fx.diff)}`);
@@ -7001,8 +7052,80 @@ function DevisesPanel({ accounts, setAccounts, entries, setEntries, settings, se
   const inputCls = "w-full border rounded px-2 py-1.5 text-sm mt-1";
   const inputStyle = { borderColor: "#DDD6C4" };
 
+  const [chg, setChg] = useState({ type: "buy", date: today, usd: "", rate: "", account: "512", commission: "", note: "" });
+  const chgUsd = Number(chg.usd) || 0;
+  const chgRate = chg.rate !== "" ? Number(chg.rate) : fxRateOn(rates, "USD", chg.date);
+  const chgFee = Number(chg.commission) || 0;
+  const chgPlan = (() => {
+    if (!(chgUsd > 0) || !(chgRate > 0)) return null;
+    if (chg.type === "buy") { const cost = fxR2(chgUsd * chgRate); return { cost, total: fxR2(cost + chgFee) }; }
+    const costOut = usdPos.usd > 0 ? fxcCostOut(usdPos, Math.min(chgUsd, usdPos.usd)) : 0, proceeds = fxR2(chgUsd * chgRate);
+    return { costOut, proceeds, net: fxR2(proceeds - chgFee), diff: fxR2(proceeds - costOut) };
+  })();
+  const changes = (entries || []).filter((e) => e.fxc && (e.fxc.type === "buy" || e.fxc.type === "sell") && fxIsActive(e)).slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 8);
+  const saveChange = () => {
+    if (Date.now() - lastSubmitRef.current < 800) return;
+    lastSubmitRef.current = Date.now();
+    if (!canEdit) { showToast("Droits insuffisants."); return; }
+    if (base === "USD") { showToast("Votre devise de tenue de compte est déjà le dollar."); return; }
+    if (!(chgUsd > 0)) { showToast("Saisissez le montant en dollars (supérieur à 0)."); return; }
+    if (!(chgRate > 0)) { showToast("Saisissez le taux (gourdes pour 1 dollar) ou enregistrez d'abord un taux USD."); return; }
+    if (chgFee < 0) { showToast("La commission ne peut pas être négative."); return; }
+    if (!guardDate(chg.date)) return;
+    if (chg.type === "sell" && chgUsd > usdPos.usd + 0.005) { showToast(`Vous ne pouvez pas vendre plus que le solde du compte en dollars (${fmtFx(usdPos.usd, "USD")}).`); return; }
+    const mk = uid, nowIso = new Date().toISOString();
+    const note = chg.note.trim();
+    const entry = chg.type === "buy"
+      ? fxcBuildBuy({ usd: chgUsd, rate: chgRate, commission: chgFee, source: chg.account, date: chg.date, label: `Achat de ${fmtFx(chgUsd, "USD")} au taux ${fmtRate(chgRate)}${note ? " — " + note : ""}`, mkId: mk, nowIso })
+      : fxcBuildSell({ usd: chgUsd, rate: chgRate, commission: chgFee, target: chg.account, date: chg.date, label: `Vente de ${fmtFx(chgUsd, "USD")} au taux ${fmtRate(chgRate)}${note ? " — " + note : ""}`, pos: usdPos, mkId: mk, nowIso });
+    ensureUsdAccounts(chg.type === "sell");
+    setEntries((prev) => [...prev, entry]);
+    logAudit("Comptabilité", chg.type === "buy" ? "Achat de devises" : "Vente de devises", `${fmtFx(chgUsd, "USD")} × ${fmtRate(chgRate)}`);
+    showToast(chg.type === "buy" ? "Achat de dollars enregistré." : "Vente de dollars enregistrée.");
+    setChg({ ...chg, usd: "", rate: "", commission: "", note: "" });
+  };
+
   return (
     <div className="space-y-6" data-testid="fx-panel">
+      <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }} data-testid="fxc-card">
+        <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Achat et vente de dollars (USD)</div>
+        <p className="text-xs mb-3" style={{ color: "#8A8370" }}>Achetez des dollars à votre banque ou à un bureau de change pour payer vos fournisseurs. Les dollars sont tenus dans un compte en dollars (5121), valorisé en {base} au coût réel payé (coût moyen). Quand vous payez un fournisseur depuis ce compte, l'écart de change est calculé contre ce coût, pas contre un taux théorique. Vos factures de vente restent en {base}, au taux que vous fixez.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" data-testid="fxc-position">
+          <div className="rounded p-3" style={{ background: "#F7F4EA" }}><div className="text-xs" style={{ color: "#8A8370" }}>Solde du compte en dollars</div><div className="text-base font-semibold tabular" data-testid="fxc-usd">{fmtFx(usdPos.usd, "USD")}</div></div>
+          <div className="rounded p-3" style={{ background: "#F7F4EA" }}><div className="text-xs" style={{ color: "#8A8370" }}>Valeur comptable ({base})</div><div className="text-base font-semibold tabular" data-testid="fxc-cost">{fmt(usdPos.cost)}</div></div>
+          <div className="rounded p-3" style={{ background: "#F7F4EA" }}><div className="text-xs" style={{ color: "#8A8370" }}>Coût moyen (1 USD)</div><div className="text-base font-semibold tabular" data-testid="fxc-avg">{usdPos.avg > 0 ? fmtRate(usdPos.avg) : "—"}</div></div>
+        </div>
+        {canEdit && base !== "USD" && (
+          <>
+            <div className="flex flex-wrap gap-4 mb-3 text-sm">
+              <label className="flex items-center gap-2"><input type="radio" name="fxctype" checked={chg.type === "buy"} onChange={() => setChg({ ...chg, type: "buy", account: "512" })} data-testid="fxc-type-buy" /> Achat de dollars</label>
+              <label className="flex items-center gap-2"><input type="radio" name="fxctype" checked={chg.type === "sell"} onChange={() => setChg({ ...chg, type: "sell", account: "512" })} data-testid="fxc-type-sell" /> Vente de dollars</label>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" max={today} value={chg.date} onChange={(e) => setChg({ ...chg, date: e.target.value })} className={inputCls} style={inputStyle} data-testid="fxc-date" /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant en dollars</label><input type="number" step="any" min="0" value={chg.usd} onChange={(e) => setChg({ ...chg, usd: e.target.value })} className={inputCls + " tabular"} style={inputStyle} data-testid="fxc-usd-input" /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Taux ({base} pour 1 USD)</label><input type="number" step="any" min="0" value={chg.rate} placeholder={chgRate ? String(chgRate) : ""} onChange={(e) => setChg({ ...chg, rate: e.target.value })} className={inputCls + " tabular"} style={inputStyle} data-testid="fxc-rate" /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>{chg.type === "buy" ? "Payé depuis" : "Reçu sur"}</label><select value={chg.account} onChange={(e) => setChg({ ...chg, account: e.target.value })} className={inputCls} style={inputStyle} data-testid="fxc-account"><option value="512">512 — Banque</option><option value="530">530 — Caisse</option></select></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Commission / frais ({base})</label><input type="number" step="any" min="0" value={chg.commission} onChange={(e) => setChg({ ...chg, commission: e.target.value })} className={inputCls + " tabular"} style={inputStyle} data-testid="fxc-fee" /></div>
+            </div>
+            <div className="mt-3"><label className="text-xs" style={{ color: "#8A8370" }}>Précision (banque, objet — facultatif)</label><input value={chg.note} maxLength={80} onChange={(e) => setChg({ ...chg, note: e.target.value })} className={inputCls} style={inputStyle} data-testid="fxc-note" /></div>
+            <div className="text-xs mt-3 p-2 rounded" style={{ background: "#FAF8F1", color: "#152238" }} data-testid="fxc-preview">
+              {!chgPlan ? "Saisissez le montant en dollars et le taux pour voir l'écriture."
+                : chg.type === "buy" ? `Dollars acquis : ${fmtFx(chgUsd, "USD")} valorisés ${fmt(chgPlan.cost)}${chgFee > 0 ? ` + frais ${fmt(chgFee)}` : ""} · sort de ${chg.account === "530" ? "la caisse" : "la banque"} : ${fmt(chgPlan.total)}`
+                : usdPos.usd <= 0 ? "Le compte en dollars est vide : rien à vendre."
+                  : `Vente : encaissé ${fmt(chgPlan.net)}${chgFee > 0 ? ` (après frais ${fmt(chgFee)})` : ""} · coût des dollars vendus ${fmt(chgPlan.costOut)} · ${chgPlan.diff === 0 ? "aucun écart de change" : chgPlan.diff > 0 ? `gain de change de ${fmt(chgPlan.diff)}` : `perte de change de ${fmt(-chgPlan.diff)}`}`}
+            </div>
+            <button onClick={saveChange} className="mt-3 px-4 py-2 rounded text-sm text-white" style={{ background: "#0F6B5C" }} data-testid="fxc-save">{chg.type === "buy" ? "Enregistrer l'achat de dollars" : "Enregistrer la vente de dollars"}</button>
+          </>
+        )}
+        {changes.length > 0 && (
+          <div className="mt-4 text-xs space-y-1" data-testid="fxc-list" style={{ color: "#152238" }}>
+            <div className="font-semibold" style={{ color: "#8A8370" }}>Dernières opérations (pour annuler : Journal des écritures)</div>
+            {changes.map((e) => <div key={e.id} data-testid="fxc-row">{e.date} — {e.label}</div>)}
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }}>
         <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Opérations en devise</div>
         <p className="text-xs" style={{ color: "#8A8370" }}>
@@ -7179,6 +7302,7 @@ function DevisesPanel({ accounts, setAccounts, entries, setEntries, settings, se
               <select value={settleForm.cash} onChange={(e) => setSettleForm({ ...settleForm, cash: e.target.value })} className={inputCls} style={inputStyle} data-testid="fx-settle-cash">
                 <option value="512">512 — Banque</option>
                 <option value="530">530 — Caisse</option>
+                {settleDoc.currency === "USD" && <option value={FX_USD_ACCOUNT.code}>5121 — Compte en dollars (USD)</option>}
               </select>
             </div>
           </div>
