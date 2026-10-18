@@ -9,19 +9,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { controle } from "./controle.mjs";
+import { verifierDependances } from "./dependances.mjs";
 
 const require = createRequire(import.meta.url);
 const esbuild = require("esbuild");
 
-const racine = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+// Le script peut se trouver dans build/ (organisation prévue) ou directement à la racine du dépôt
+// (si les dossiers ont été aplatis lors de l'envoi sur GitHub) : on s'adapte aux deux cas.
+const dossierScript = path.dirname(new URL(import.meta.url).pathname);
+const racine = fs.existsSync(path.join(dossierScript, "docs")) ? dossierScript : path.resolve(dossierScript, "..");
 const cible = process.argv[2] || process.env.TARGET || "prod";
 if (cible !== "prod" && cible !== "test") { console.error("Cible inconnue : " + cible + " (prod ou test)"); process.exit(2); }
 const sortie = path.resolve(process.env.SORTIE || path.join(racine, "docs"));
-const dossierParties = path.join(racine, "src", "parties");
+const estPartie = (n) => /^\d\d-.+\.jsx$/.test(n);
+const dossierParties = [path.join(racine, "src", "parties"), path.join(racine, "src"), racine]
+  .find((d) => fs.existsSync(d) && fs.readdirSync(d).some(estPartie));
+if (!dossierParties) { console.error("Aucune partie (fichiers 00-….jsx) trouvée."); process.exit(1); }
+console.log("Parties lues dans : " + path.relative(racine, dossierParties) + (dossierParties === racine ? "(racine)" : ""));
 
 // 1) Assemblage des parties
-const noms = fs.readdirSync(dossierParties).filter((n) => n.endsWith(".jsx")).sort();
-if (noms.length === 0) { console.error("Aucune partie trouvée dans src/parties/."); process.exit(1); }
+const noms = fs.readdirSync(dossierParties).filter(estPartie).sort();
+const lues = noms.map((n) => ({ nom: n, texte: fs.readFileSync(path.join(dossierParties, n), "utf8") }));
+const dep = verifierDependances(lues);
+dep.infos.forEach((i) => console.log("  · " + i));
+if (dep.problemes.length) { console.error("BLOQUÉ — frontières entre modules :"); dep.problemes.forEach((x) => console.error("  ✗ " + x)); process.exit(1); }
 let source = noms.map((n) => fs.readFileSync(path.join(dossierParties, n), "utf8")).join("");
 
 // 2) Cible TEST : même substitution que l'ancienne publication (première occurrence par ligne)
