@@ -1,51 +1,47 @@
 // ═══ MODULE ═══
 // @module Annonces et rappels
-// @depends supabase, uid, useEffect, useState
+// @depends supabase, useEffect, useState
 // @exports AnnouncementsAdminPanel, AnnouncementsBanner, EmailRemindersPanel
 // ═══ FIN DE L'EN-TÊTE ═══
 // --- Annonces de la plateforme -------------------------------------------------
-// Les annonces sont écrites par l'équipe dans le Centre de gestion (onglet Annonces) et
-// affichées à chaque utilisateur à l'ouverture, une seule fois chacune : le bouton « J'ai lu »
-// l'enregistre. Tant que la table n'existe pas ou que la connexion manque, rien ne s'affiche
-// et rien ne bloque.
+// Les annonces sont écrites par l'équipe dans le Centre de gestion (onglet Annonces). Elles
+// s'affichent à chaque ouverture de l'application et à chaque rechargement de la page, tant que
+// l'équipe ne les a pas retirées et que leur période n'est pas terminée : une annonce longue
+// reste ainsi un rappel. « J'ai lu » la masque seulement jusqu'au prochain rechargement ou à la
+// prochaine session de travail. Sans connexion, rien ne s'affiche et rien ne bloque.
+const _announcementsDismissed = new Set(); // masquées pour cette session de travail (mémoire de la page seulement)
 function AnnouncementsBanner() {
   const [items, setItems] = useState([]);
-  const [userId, setUserId] = useState(null);
+  const [, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         if (typeof navigator !== "undefined" && navigator.onLine === false) return;
         const { data: u } = await supabase.auth.getUser();
-        const uid = u && u.user && u.user.id;
-        if (!uid) return;
+        if (!(u && u.user && u.user.id)) return;
         const { data: ann, error } = await supabase.from("announcements").select("id, title, body, level, ends_at, active, created_at").eq("active", true).order("created_at", { ascending: false });
         if (error || !Array.isArray(ann) || ann.length === 0) return;
-        const { data: reads } = await supabase.from("announcement_reads").select("announcement_id").eq("user_id", uid);
-        const seen = new Set((reads || []).map((r) => r.announcement_id));
         const now = Date.now();
         const list = ann
-          .filter((a) => a.active !== false && !seen.has(a.id) && (!a.ends_at || Date.parse(a.ends_at) > now))
-          .sort((x, y) => String(y.created_at || "").localeCompare(String(x.created_at || "")))
-          .slice(0, 3);
-        if (!cancelled) { setUserId(uid); setItems(list); }
+          .filter((a) => a.active !== false && (!a.ends_at || Date.parse(a.ends_at) > now))
+          .sort((x, y) => String(y.created_at || "").localeCompare(String(x.created_at || "")));
+        if (!cancelled) setItems(list);
       } catch (e) { /* silencieux : une annonce manquée n'empêche jamais de travailler */ }
     })();
     return () => { cancelled = true; };
   }, []);
-  const markRead = async (a) => {
-    setItems((prev) => prev.filter((x) => x.id !== a.id));
-    try { await supabase.from("announcement_reads").insert({ announcement_id: a.id, user_id: userId }); } catch (e) { /* sera réaffichée à la prochaine ouverture */ }
-  };
-  if (items.length === 0) return null;
+  const dismiss = (a) => { _announcementsDismissed.add(a.id); setTick((t) => t + 1); };
+  const visible = items.filter((a) => !_announcementsDismissed.has(a.id)).slice(0, 3);
+  if (visible.length === 0) return null;
   return (
     <div data-testid="announcements" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 65, width: "min(92vw, 560px)", display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.map((a) => (
+      {visible.map((a) => (
         <div key={a.id} data-testid="announcement" role="status" style={{ background: a.level === "important" ? "#FBF1DC" : "#FFFFFF", border: "1px solid " + (a.level === "important" ? "#E0B94F" : "#DDD6C4"), borderRadius: 8, padding: 14, boxShadow: "0 4px 16px rgba(21,34,56,0.15)" }}>
           <div style={{ fontWeight: 600, color: "#152238", marginBottom: 4 }}>{a.level === "important" ? "Important · " : ""}{a.title}</div>
           <div style={{ fontSize: 14, color: "#4A4636", whiteSpace: "pre-wrap" }}>{a.body}</div>
           <div style={{ textAlign: "right", marginTop: 8 }}>
-            <button data-testid="announcement-read" onClick={() => markRead(a)} style={{ background: "#152238", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>J'ai lu</button>
+            <button data-testid="announcement-read" onClick={() => dismiss(a)} style={{ background: "#152238", color: "#fff", border: "none", borderRadius: 4, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>J'ai lu</button>
           </div>
         </div>
       ))}
