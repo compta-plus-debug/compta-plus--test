@@ -69,7 +69,7 @@ function CentreDeGestionModule({ showToast, currentUserEmail, isPlatformAdmin })
   const basePerms = isPlatformAdmin
     ? { entreprises: true, offres: true, statistiques: true, collaborateurs: true, supervision: true }
     : (myRecord?.permissions || { entreprises: true, offres: true, statistiques: true, collaborateurs: false });
-  const perms = { ...basePerms, aide: isPlatformAdmin ? true : basePerms.aide !== false, cabinets: isPlatformAdmin ? true : !!basePerms.offres };
+  const perms = { ...basePerms, aide: isPlatformAdmin ? true : basePerms.aide !== false, cabinets: isPlatformAdmin ? true : !!basePerms.offres, annonces: isPlatformAdmin ? true : !!basePerms.offres };
 
   // Nombre de messages d'utilisateurs pas encore lus — affiché sur l'onglet
   // et rafraîchi régulièrement pour ne jamais manquer une demande d'aide.
