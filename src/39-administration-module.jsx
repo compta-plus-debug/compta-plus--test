@@ -566,6 +566,9 @@ function AdminModule({
   // confirmation explicite, création d'un point de restauration de l'état actuel
   // puis application des données.
   const [restorePreview, setRestorePreview] = useState(null);
+  // Message d'état visible dans la page (en plus de l'avis passager), pour qu'un import
+  // qui échoue ne reste jamais sans réponse à l'écran, notamment sur téléphone.
+  const [importStatus, setImportStatus] = useState(null);
   const [restoring, setRestoring] = useState(false);
   const [rpRefresh, setRpRefresh] = useState(0);
   const startRestore = (parsed, sourceLabel) => {
@@ -573,6 +576,7 @@ function AdminModule({
     const result = validateImportData(parsed);
     if (!result.ok) {
       showToast(`Import refusé : ${result.error}`);
+      setImportStatus({ kind: "error", text: `Import refusé : ${result.error}` });
       return;
     }
     const meta = verdict.meta;
@@ -601,6 +605,7 @@ function AdminModule({
     }
     const rows = bkDiff(buildExportData(), result.data);
     const untouched = Object.keys(BK_LABELS).filter((k) => !(k in result.data)).map((k) => BK_LABELS[k]);
+    setImportStatus(null);
     setRestorePreview({
       sourceLabel, meta, status: verdict.status, blocked, warnings, rows, untouched,
       fileCompanyName, curCompanyName,
@@ -671,30 +676,55 @@ function AdminModule({
       parsed = JSON.parse(rawText);
     } catch (err) {
       showToast("Ce fichier n'est pas une sauvegarde Compta+ valide.");
+      setImportStatus({ kind: "error", text: "Ce fichier n'est pas une sauvegarde Compta+ valide. Utilisez un fichier téléchargé avec « Exporter » (extension .json)." });
       return;
     }
-    startRestore(parsed, sourceLabel);
+    try {
+      startRestore(parsed, sourceLabel);
+    } catch (err) {
+      showToast("Ce fichier n'a pas pu être analysé. Réessayez avec « Coller le texte à la place ».");
+      setImportStatus({ kind: "error", text: "Ce fichier n'a pas pu être analysé. Essayez « Coller le texte à la place », ou refaites une sauvegarde avec « Exporter »." });
+    }
   };
 
-  const importData = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    // Sans ce gestionnaire, une lecture qui échoue (permission refusée sur l'URI
-    // renvoyée par le sélecteur de fichiers Android, fichier corrompu, etc.) ne
-    // montrait absolument rien à l'écran — ni erreur, ni confirmation.
-    reader.onerror = () => {
-      showToast(`Impossible de lire le fichier « ${file.name} ». Vérifiez-le, puis réessayez.`);
-      e.target.value = "";
-    };
-    reader.onload = (evt) => {
-      applyImportedJson(evt.target.result, file.name);
-      e.target.value = "";
-    };
+  const importData = async (e) => {
+    const input = e.target;
+    const file = input.files && input.files[0];
+    if (!file) {
+      setImportStatus({ kind: "error", text: "Aucun fichier n'a été reçu. Choisissez à nouveau le fichier, ou utilisez « Coller le texte à la place »." });
+      return;
+    }
+    // Retour immédiat à l'écran : l'utilisateur voit que le fichier est bien arrivé.
+    setImportStatus({ kind: "info", text: `Fichier reçu : « ${file.name} » (${Math.max(1, Math.round(file.size / 1024))} Ko). Lecture en cours…` });
+    const readFile = () => new Promise((resolve, reject) => {
+      // Sans ce gestionnaire d'erreur, une lecture qui échoue (permission refusée sur
+      // l'URI renvoyée par le sélecteur de fichiers Android, fichier corrompu…) ne
+      // montrait rien. On essaie d'abord la lecture moderne, puis l'ancienne.
+      const viaReader = () => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error("lecture"));
+        reader.onload = (evt) => resolve(String(evt.target.result || ""));
+        try { reader.readAsText(file); } catch (err) { reject(err); }
+      };
+      if (typeof file.text === "function") {
+        file.text().then(resolve, viaReader);
+      } else {
+        viaReader();
+      }
+    });
     try {
-      reader.readAsText(file);
+      const text = await readFile();
+      input.value = "";
+      if (!text || !text.trim()) {
+        showToast(`Le fichier « ${file.name} » est vide ou illisible.`);
+        setImportStatus({ kind: "error", text: `Le fichier « ${file.name} » est vide ou illisible. Refaites une sauvegarde avec « Exporter », ou utilisez « Coller le texte à la place ».` });
+        return;
+      }
+      applyImportedJson(text, file.name);
     } catch (err) {
-      showToast("Impossible de lire ce fichier. Vérifiez-le, puis réessayez.");
+      try { input.value = ""; } catch (e2) { /* sélecteur déjà libéré */ }
+      showToast(`Impossible de lire le fichier « ${file.name} ». Vérifiez-le, puis réessayez.`);
+      setImportStatus({ kind: "error", text: `Impossible de lire le fichier « ${file.name} ». Sur téléphone, copiez-le d'abord dans le dossier Téléchargements, ou utilisez « Coller le texte à la place ».` });
     }
   };
   const [pastedJson, setPastedJson] = useState("");
@@ -1259,13 +1289,16 @@ function AdminModule({
             <Upload size={18} style={{ color: "#0F6B5C" }} className="mb-2" />
             <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Importer une sauvegarde</div>
             <p className="text-xs mb-3" style={{ color: "#8A8370" }}>Affiche d'abord un aperçu des différences, puis remplace les données actuelles par celles du fichier après votre confirmation.</p>
-            <input type="file" accept="application/json,.json,text/plain,application/octet-stream" ref={fileInputRef} onChange={importData} className="hidden" />
+            <input type="file" ref={fileInputRef} onChange={importData} className="hidden" data-testid="backup-file" />
             <div className="flex flex-wrap gap-2">
               <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 rounded text-xs text-white" style={{ background: "#152238" }}>Importer un fichier</button>
               <button onClick={() => setShowPasteImport((v) => !v)} className="px-3 py-1.5 rounded text-xs" style={{ border: "1px solid #DDD6C4", color: "#152238" }}>
                 {showPasteImport ? "Annuler" : "Coller le texte à la place"}
               </button>
             </div>
+            {importStatus && (
+              <div data-testid="import-status" role="status" className="mt-3 text-xs p-2 rounded" style={{ background: importStatus.kind === "error" ? "#F7E9E3" : "#E6F1EE", color: importStatus.kind === "error" ? "#A6432F" : "#0F6B5C", wordBreak: "break-word" }}>{importStatus.text}</div>
+            )}
             {showPasteImport && (
               <div className="mt-3">
                 <p className="text-xs mb-2" style={{ color: "#8A8370" }}>
@@ -1277,7 +1310,7 @@ function AdminModule({
                   className="w-full border rounded px-2 py-1.5 text-xs font-mono mt-1" style={{ borderColor: "#DDD6C4" }} />
                 <button
                   onClick={() => {
-                    if (!pastedJson.trim()) { showToast("Collez d'abord le contenu JSON."); return; }
+                    if (!pastedJson.trim()) { showToast("Collez d'abord le contenu JSON."); setImportStatus({ kind: "error", text: "Collez d'abord le contenu du fichier dans la zone ci-dessus." }); return; }
                     applyImportedJson(pastedJson, "collé manuellement");
                     setPastedJson("");
                     setShowPasteImport(false);
