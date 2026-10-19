@@ -1,7 +1,7 @@
 // Politique de sécurité de la page (v229) : vérifie que chaque source externe réellement utilisée par la page et par l'application est autorisée.
 const fs=require('fs'),path=require('path');
 let fails=0;const ok=(n,c,i)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(i)));if(!c)fails++};
-const racine=path.resolve(__dirname,'..');
+const racine=[path.resolve(__dirname,'..'),__dirname,process.cwd(),path.resolve(process.cwd(),'..')].find(d=>fs.existsSync(path.join(d,'docs/index.html')))||path.resolve(__dirname,'..');
 const html=fs.readFileSync(path.join(racine,'docs/index.html'),'utf8');
 const js=fs.existsSync(path.join(racine,'docs/app.min.js'))?fs.readFileSync(path.join(racine,'docs/app.min.js'),'utf8'):'';
 const m=html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/);
