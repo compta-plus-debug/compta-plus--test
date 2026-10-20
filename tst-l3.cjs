@@ -31,6 +31,7 @@ let ln=await P.evaluate(()=>window.__srv.getCat('loans')[0]);
 ok('emprunt : devise USD, valeur d\'origine 1 300 000',ln.currency==='USD'&&ln.bookHtg===1300000&&ln.bookRate===130,ln);
 ok('badge USD et valeur comptable affichés',(await T('loan-fx-badge').count())===1&&/1[\s  ,.]?300[\s  ,.]?000/.test(await T('loan-book-value').first().innerText()));
 ok('capital restant dû affiché en dollars',/10[\s  ,.]?000/.test(await T('loan-remaining').first().innerText())&&/\$|USD/.test(await T('loan-remaining').first().innerText()),await T('loan-remaining').first().innerText());
+ok('cartes récapitulatives en dollars : 10 000 USD, valeur 1 300 000, écart latent nul au taux 130',(await T('loans-fx-summary').count())===1&&/10[\s  ,.]?000/.test(await T('loans-fx-remaining').innerText())&&/1[\s  ,.]?300[\s  ,.]?000/.test(await T('loans-fx-book').innerText())&&/gain 0|perte 0/.test(await T('loans-fx-latent').innerText()),[await T('loans-fx-remaining').innerText(),await T('loans-fx-latent').innerText()]);
 // paiement 1 au taux 140 (perte)
 await T('loan-pay').first().click();await P.waitForTimeout(300);
 await T('pay-date').fill('2026-02-10');await T('pay-rate').fill('140');await P.waitForTimeout(300);
