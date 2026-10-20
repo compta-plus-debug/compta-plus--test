@@ -1,7 +1,11 @@
 // v236 : calculs du module Emprunts (tableau d'amortissement, intérêts courus, remboursement anticipé).
 const fs=require('fs');
 let fails=0;const ok=(n,c,i)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(i)));if(!c)fails++};
-const src=fs.readFileSync(__dirname+'/../src/parties/46-compta-emprunts.jsx','utf8');
+// Le dépôt peut être rangé de plusieurs façons : on cherche le fichier aux emplacements connus.
+const cand=['/../src/parties/','/src/parties/','/src/','/../src/','/'].map(d=>__dirname+d+'46-compta-emprunts.jsx');
+const found=cand.find(p=>fs.existsSync(p));
+if(!found){console.log('FAIL fichier 46-compta-emprunts.jsx introuvable');process.exit(1);}
+const src=fs.readFileSync(found,'utf8');
 const a=src.indexOf('// <calcul-emprunts>'),b=src.indexOf('// </calcul-emprunts>');
 const lib=new Function(src.slice(a,b)+';return {loanBuildSchedule,loanSummary,loansTotals,loanAccrued,loanRebuildAfterPartial,loanAddMonths,loanAddDays,loanDaysBetween,loanValidDate,loanRound};')();
 const sum=(rows,k)=>Math.round(rows.reduce((s,r)=>s+r[k],0)*100)/100;
