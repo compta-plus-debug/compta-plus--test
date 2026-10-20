@@ -621,7 +621,9 @@ function AdminModule({
     if (data.movements) setMovements(data.movements);
     if (data.clients) setClients(data.clients);
     if (data.settings) {
-      setSettings(data.settings);
+      // Réglage de sécurité propre à l'entreprise qui restaure : un fichier venant d'une autre
+      // entreprise ne doit jamais imposer (ni retirer) la double authentification ici.
+      setSettings({ ...data.settings, requireAdminMfa: !!(settings && settings.requireAdminMfa) });
       setCompanyName(data.settings.companyName || "");
       setCompanyAddress(data.settings.companyAddress || "");
       setCompanyPhone(data.settings.companyPhone || "");
