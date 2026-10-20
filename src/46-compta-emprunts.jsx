@@ -257,6 +257,13 @@ function LoansPanel({ accounts, setAccounts, loans, setLoans, entries, setEntrie
   const [latentRates, setLatentRates] = useState({});
 
   const totals = loansTotals(loans, today);
+  const fxLoans = (loans || []).filter((l) => loanIsFx(l) && l.status !== "solde");
+  const fxTot = fxLoans.reduce((t, l) => {
+    const sm = loanSummary(l, today), r = fxRateOn(rates, l.currency, today);
+    t.remaining += sm.remaining; t.due += sm.dueWithinYear; t.book += sm.remainingBook;
+    t.latent = r > 0 && t.latent !== null ? t.latent + (sm.remainingBook - loanRound(sm.remaining * r)) : null;
+    return t;
+  }, { remaining: 0, due: 0, book: 0, latent: 0 });
   const ensureAccounts = (defs) => {
     const missing = defs.filter((d) => !accounts.some((a) => a.code === d.code));
     if (missing.length) setAccounts((prev) => [...prev, ...missing.filter((d) => !prev.some((a) => a.code === d.code)).map((d) => ({ code: d.code, name: d.name, type: d.type }))]);
@@ -561,6 +568,15 @@ function LoansPanel({ accounts, setAccounts, loans, setLoans, entries, setEntrie
         <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Prochaine échéance</div><div className="text-sm font-semibold" style={{ color: "#152238" }}>{totals.next ? totals.next.date + " · " + (totals.next.currency && totals.next.currency !== "HTG" ? fmtFx(totals.next.total, totals.next.currency) : fmt(totals.next.total)) : "—"}</div></div>
         <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Échéances en retard</div><div className="text-lg font-semibold" style={{ color: totals.overdue ? "#A6432F" : "#152238" }} data-testid="loans-overdue">{totals.overdue}</div></div>
       </div>
+
+      {fxLoans.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="loans-fx-summary">
+          <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Emprunts en dollars — capital restant dû</div><div className="text-lg font-semibold tabular" style={{ color: "#1F5A8C" }} data-testid="loans-fx-remaining">{fmtFx(fxTot.remaining, "USD")}</div></div>
+          <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Dont à moins d'un an</div><div className="text-lg font-semibold tabular" style={{ color: "#1F5A8C" }} data-testid="loans-fx-lt1">{fmtFx(fxTot.due, "USD")}</div></div>
+          <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Valeur comptable en gourdes</div><div className="text-lg font-semibold tabular" style={{ color: "#152238" }} data-testid="loans-fx-book">{fmt(fxTot.book)}</div></div>
+          <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}><div className="text-xs" style={{ color: "#8A8370" }}>Écart latent estimé (non comptabilisé)</div><div className="text-sm font-semibold tabular" style={{ color: fxTot.latent === null ? "#8A8370" : fxTot.latent >= 0 ? "#0F6B5C" : "#A6432F" }} data-testid="loans-fx-latent">{fxTot.latent === null ? "Taux du jour non enregistré" : (fxTot.latent >= 0 ? "gain " : "perte ") + fmt(Math.abs(fxTot.latent))}</div></div>
+        </div>
+      )}
 
       {canEdit && (
         <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }} data-testid="loan-form">
