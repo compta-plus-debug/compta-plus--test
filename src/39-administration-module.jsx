@@ -1,13 +1,10 @@
 // ═══ MODULE ═══
 // @module Administration module
-// @depends APP_VERSION, AdminMfaRequirementPanel, BK_LABELS, BluetoothPrinterCard, CURRENCIES
-//   CompanyGroupPanel, CompanySecurityPinPanel, DEFAULT_ACCOUNTS, DEFAULT_CLIENTS
-//   DEFAULT_PRODUCTS, DEFAULT_SUPPLIERS, Download, EmailRemindersPanel, GroupedTabNav, Lock
-//   NET_MSG, PartialResetPanel, Plus, RestorePointsPanel, RestorePreviewModal, SalesStationsPanel
-//   StockMethodPanel, TAX_SYSTEMS, Trash2, Upload, bkBalance, bkBuildFile, bkDiff, bkDownload
-//   bkVerify, ecInviteError, fmt, genInviteToken, isFutureDate, isLocked, logClientError
-//   resizeImage, resolveMembership, rpSave, supabase, todayStr, uid, useBackNav, useEffect
-//   useState
+// @depends APP_VERSION, BK_LABELS, CURRENCIES, DEFAULT_ACCOUNTS, DEFAULT_CLIENTS, DEFAULT_PRODUCTS
+//   DEFAULT_SUPPLIERS, GroupedTabNav, NET_MSG, PartialResetPanel, Plus, RestorePreviewModal
+//   TAX_SYSTEMS, bkBalance, bkBuildFile, bkDiff, bkDownload, bkVerify, ecInviteError, fmt
+//   genInviteToken, isFutureDate, isLocked, logClientError, resizeImage, resolveMembership, rpSave
+//   supabase, todayStr, uid, useBackNav, useEffect, useState
 // @exports AdminModule
 // ═══ FIN DE L'EN-TÊTE ═══
 function AdminModule({
@@ -1289,9 +1286,17 @@ function AdminModule({
             <Upload size={18} style={{ color: "#0F6B5C" }} className="mb-2" />
             <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Importer une sauvegarde</div>
             <p className="text-xs mb-3" style={{ color: "#8A8370" }}>Affiche d'abord un aperçu des différences, puis remplace les données actuelles par celles du fichier après votre confirmation.</p>
-            <input type="file" ref={fileInputRef} onChange={importData} className="hidden" data-testid="backup-file" />
+            
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 rounded text-xs text-white" style={{ background: "#152238" }}>Importer un fichier</button>
+              {/* Bouton « étiquette » : le sélecteur de fichiers s'ouvre par un vrai toucher sur le champ
+                  (plus fiable sur Android et Samsung que le déclenchement par programme d'un champ caché). */}
+              <label className="px-3 py-1.5 rounded text-xs text-white cursor-pointer" style={{ background: "#152238", position: "relative", display: "inline-block", overflow: "hidden" }}>
+                Importer un fichier
+                <input type="file" ref={fileInputRef} onChange={importData}
+                  onClick={(e) => { try { e.currentTarget.value = ""; } catch (err) { /* sélecteur indisponible */ } }}
+                  data-testid="backup-file"
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", fontSize: 0 }} />
+              </label>
               <button onClick={() => setShowPasteImport((v) => !v)} className="px-3 py-1.5 rounded text-xs" style={{ border: "1px solid #DDD6C4", color: "#152238" }}>
                 {showPasteImport ? "Annuler" : "Coller le texte à la place"}
               </button>
