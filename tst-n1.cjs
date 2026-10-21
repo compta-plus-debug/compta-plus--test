@@ -1,7 +1,7 @@
 // v241 : chargement à la demande des écrans lourds (chantier 8).
 const {chromium}=require('playwright');const {boot}=require('./tst-harness.cjs');const fs=require('fs'),path=require('path');
 let fails=0;const ok=(n,c,i)=>{console.log((c?'PASS ':'FAIL ')+n+(c?'':' '+JSON.stringify(i)));if(!c)fails++};
-const appJs=process.env.APP_JS||path.join(__dirname,'..','docs','app.min.js');
+const appJs=process.env.APP_JS||[path.join(__dirname,'..','docs','app.min.js'),path.join(__dirname,'docs','app.min.js')].find(f=>fs.existsSync(f));
 const cdir=path.join(path.dirname(appJs),'chunks');
 const pageInit=(delay)=>new Function("try{localStorage.removeItem('compta-plus-active-tab')}catch(e){};window.__CP_PREFETCH_DELAY="+delay+";");
 const menu=async(P,label)=>{await P.getByText(label,{exact:true}).first().click();await P.waitForTimeout(700);};
