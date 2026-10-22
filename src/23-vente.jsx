@@ -5,11 +5,11 @@
 //   OFL_EVT, OflPanel, Pencil, PendingRecommendationsBanner, Plus, Printer, ProductHistoryModal
 //   Receipt, RecordedStamp, RotateCcw, ScanLine, TAX_SYSTEMS, Trash2, X, _membership, balanceDue
 //   detectAmountAnomaly, detectDuplicateAnomaly, detectTaxAnomaly, downloadInvoicePDF, fmt
-//   isFutureDate, isLocked, makeChequeRecord, nifLigne, normalizeClientName, oflCompanyId
-//   oflEnqueue, oflFinal, oflIsNetworkError, oflLoad, oflProvisionalNumber, oflReserved
-//   oflTimeout, printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers, supabase
-//   tauxFactureTexte, todayStr, uid, useAssistedAnomalyGate, useBackNav, useEffect, useMemo
-//   useState
+//   invoicePrefix, isFutureDate, isLocked, makeChequeRecord, nifLigne, normalizeClientName
+//   oflCompanyId, oflEnqueue, oflFinal, oflIsNetworkError, oflLoad, oflProvisionalNumber
+//   oflReserved, oflTimeout, printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers
+//   supabase, tauxFactureTexte, todayStr, uid, useAssistedAnomalyGate, useBackNav, useEffect
+//   useMemo, useState
 // @exports VenteModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // Brouillon de vente : le panier en cours (produits, client, mode de paiement, remises, frais) est gardé quand on
@@ -36,7 +36,7 @@ function posDraftSave(key, data) {
   } catch (e) { /* stockage plein ou indisponible : le brouillon en mémoire suffit */ }
 }
 
-function VenteModule({ setCheques, accounts, entries, setEntries, products: productsProp, setProducts, productImages, setProductImages, invoices, setInvoices, movements, setMovements, settings, setSettings, salesStations, stationId, setStationId, role, showToast, logAudit, verifyTransactionSaved, planTier, recordPendingRecommendation, currentUserEmail, pendingRecommendations, resolvePendingRecommendation }) {
+function VenteModule({ clients, setCheques, accounts, entries, setEntries, products: productsProp, setProducts, productImages, setProductImages, invoices, setInvoices, movements, setMovements, settings, setSettings, salesStations, stationId, setStationId, role, showToast, logAudit, verifyTransactionSaved, planTier, recordPendingRecommendation, currentUserEmail, pendingRecommendations, resolvePendingRecommendation }) {
   const anomalyGate = useAssistedAnomalyGate();
   // --- Vente hors ligne : file locale, stock réservé, état de connexion ---
   const [oflQ, setOflQ] = useState(() => oflLoad());
@@ -69,6 +69,14 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
   const dr = draftRef.current;
   const [cart, setCart] = useState(() => (dr ? dr.cart : [])); // [{productId, qty}]
   const [client, setClient] = useState(() => (dr && dr.client) || "");
+  // Adresse du client portée sur la facture (facultative) : reprise de la fiche client quand le nom correspond.
+  const [clientAddr, setClientAddr] = useState(() => (dr && dr.clientAddr) || "");
+  const [clientAddrTouched, setClientAddrTouched] = useState(false);
+  useEffect(() => {
+    if (clientAddrTouched) return;
+    const rec = (clients || []).find((c) => c && c.address && normalizeClientName(c.name) === normalizeClientName(client));
+    setClientAddr(rec ? rec.address : "");
+  }, [client, clients]);
   const [paymentMode, setPaymentMode] = useState(() => (dr && dr.paymentMode) || "caisse"); // caisse | banque | credit
   const [partialPaymentAmount, setPartialPaymentAmount] = useState(() => (dr && dr.partialPaymentAmount) || "");
   const [partialPaymentAccount, setPartialPaymentAccount] = useState(() => (dr && dr.partialPaymentAccount) || "caisse"); // caisse | banque
@@ -351,7 +359,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
       return;
     }
     if (editingInvoiceId) {
-      invNumber = invoices.find((i) => i.id === editingInvoiceId)?.number || ("F" + String(settings.nextInvoiceNumber || 1).padStart(4, "0"));
+      invNumber = invoices.find((i) => i.id === editingInvoiceId)?.number || (invoicePrefix(settings) + String(settings.nextInvoiceNumber || 1).padStart(4, "0"));
     } else if (typeof navigator !== "undefined" && navigator.onLine === false) {
       offlineMode = true;
       invNumber = oflProvisionalNumber();
@@ -364,7 +372,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
         const companyId = await oflCompanyId();
         const { data: n, error } = await oflTimeout(supabase.rpc("next_invoice_number", { target_company_id: companyId }), 6000);
         if (error) throw error;
-        invNumber = "F" + String(n).padStart(4, "0");
+        invNumber = invoicePrefix(settings) + String(n).padStart(4, "0");
       } catch (e) {
         if (oflIsNetworkError(e)) {
           // Connexion coupée ou trop instable : la vente continue hors ligne plutôt que d'être bloquée.
@@ -508,6 +516,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
       date,
       createdAt: invoiceBeingEdited ? invoiceBeingEdited.createdAt : new Date().toISOString(),
       client: client || "Client comptant",
+      ...(clientAddr.trim() ? { clientAddress: clientAddr.trim() } : {}),
       lines: cartLines.map((l) => ({ productId: l.productId, name: l.product.name, qty: l.qty, price: l.product.price, discountPct: l.discountPct || 0, discountAmt: l.discountAmt || 0, subtotal: l.subtotal, tva: l.product.tva, taxAmount: l.taxAmount })),
       globalDiscountPct: Number(globalDiscountPct) || 0,
       globalDiscountAmtInput: Number(globalDiscountAmt) || 0,
@@ -546,7 +555,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
         stockLines: stockLinesForGate.map((l) => ({ productId: l.productId, qty: l.qty, name: l.product.name })),
       });
       if (!queued) { showToast("Espace de stockage de l'appareil saturé : la vente n'a pas pu être gardée hors ligne. Reconnectez-vous pour continuer."); return; }
-      setCart([]); setClient(""); setEditingInvoiceId(null); setGlobalDiscountPct(0); setGlobalDiscountAmt(0); setFees([]); setPartialPaymentAmount(""); setSaleDate(todayStr());
+      setCart([]); setClient(""); setClientAddr(""); setClientAddrTouched(false); setEditingInvoiceId(null); setGlobalDiscountPct(0); setGlobalDiscountAmt(0); setFees([]); setPartialPaymentAmount(""); setSaleDate(todayStr());
       showToast(`Vente ${invNumber} enregistrée HORS LIGNE sur cet appareil — elle sera synchronisée automatiquement au retour de la connexion.`);
       logAudit("Vente", "Vente hors ligne", `${invNumber} — ${fmt(total)}`);
       return;
@@ -652,7 +661,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
 
 
     setCart([]);
-    setClient("");
+    setClient(""); setClientAddr(""); setClientAddrTouched(false);
     setEditingInvoiceId(null);
     setGlobalDiscountPct(0);
     setGlobalDiscountAmt(0);
@@ -850,6 +859,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
     }
     setCart(inv.lines.map((l) => ({ productId: l.productId, qty: l.qty, discountPct: l.discountPct || 0, discountAmt: l.discountAmt || 0 })));
     setClient(inv.client === "Client comptant" ? "" : inv.client);
+    setClientAddr(inv.clientAddress || ""); setClientAddrTouched(true);
     setPaymentMode(inv.paymentMode);
     setGlobalDiscountPct(inv.globalDiscountPct || 0);
     setGlobalDiscountAmt(inv.globalDiscountAmtInput || 0);
@@ -861,7 +871,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
 
   const cancelEditInvoice = () => {
     setCart([]);
-    setClient("");
+    setClient(""); setClientAddr(""); setClientAddrTouched(false);
     setPaymentMode("caisse");
     setGlobalDiscountPct(0);
     setGlobalDiscountAmt(0);
@@ -1234,6 +1244,10 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
             </div>
             <input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Nom du client (optionnel)"
               className="w-full border rounded px-2 py-1.5 text-sm mb-2" style={{ borderColor: "#DDD6C4" }} />
+            {client.trim() && (
+              <input value={clientAddr} onChange={(e) => { setClientAddr(e.target.value); setClientAddrTouched(true); }} placeholder="Adresse du client (facultatif, imprimée sur la facture)" data-testid="vente-adresse-client"
+                className="w-full border rounded px-2 py-1.5 text-sm mb-2" style={{ borderColor: "#DDD6C4" }} />
+            )}
             {planTier === "assisted" && client.trim().length >= 3 && (() => {
               const existingNames = [...new Set(invoices.map((i) => i.client).filter(Boolean))];
               const similar = suggestSimilarTiers(client, existingNames);
@@ -1888,6 +1902,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
           <div>Facture N° {printInvoice.number}</div>
           <div>{printInvoice.date}</div>
           <div>Client : {printInvoice.client || "Client comptant"}</div>
+          {printInvoice.clientAddress && <div>Adresse : {printInvoice.clientAddress}</div>}
           {printInvoice.soldByName && <div>Vendeur : {printInvoice.soldByName}</div>}
           <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
           {(printInvoice.lines || []).map((l, i) => (
@@ -1949,6 +1964,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
             <div>
               <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Facturé à</div>
               <div style={{ fontWeight: 600, marginTop: 2 }}>{printInvoice.client || "Client comptant"}</div>
+              {printInvoice.clientAddress && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }} data-testid="print-adresse-client">{printInvoice.clientAddress}</div>}
               {printInvoice.soldByName && <div style={{ fontSize: 12, color: "#7A7460", marginTop: 2 }}>Vendeur : {printInvoice.soldByName}</div>}
             </div>
             <div style={{ textAlign: "right" }}>
