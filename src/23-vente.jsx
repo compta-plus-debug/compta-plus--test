@@ -1,14 +1,14 @@
 // ═══ MODULE ═══
 // @module Vente
 // @depends AssistedPrincipleReminder, BarcodeScannerModal, BluetoothIcon, BluetoothPrinterCard
-//   CheckCircle2, ChequeDialog, Download, History, ImageIcon, Lock, Minus, OFL_EVT, OflPanel
-//   Pencil, PendingRecommendationsBanner, Plus, Printer, ProductHistoryModal, Receipt
-//   RecordedStamp, RotateCcw, ScanLine, TAX_SYSTEMS, Trash2, X, _membership, balanceDue
+//   CheckCircle2, ChequeDialog, Download, History, ImageIcon, Lock, MENTION_FRANCHISE_TCA, Minus
+//   OFL_EVT, OflPanel, Pencil, PendingRecommendationsBanner, Plus, Printer, ProductHistoryModal
+//   Receipt, RecordedStamp, RotateCcw, ScanLine, TAX_SYSTEMS, Trash2, X, _membership, balanceDue
 //   detectAmountAnomaly, detectDuplicateAnomaly, detectTaxAnomaly, downloadInvoicePDF, fmt
-//   isFutureDate, isLocked, makeChequeRecord, normalizeClientName, oflCompanyId, oflEnqueue
-//   oflFinal, oflIsNetworkError, oflLoad, oflProvisionalNumber, oflReserved, oflTimeout
-//   printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers, supabase, todayStr, uid
-//   useAssistedAnomalyGate, useBackNav, useEffect, useMemo, useState
+//   isFutureDate, isLocked, makeChequeRecord, nifLigne, normalizeClientName, oflCompanyId
+//   oflEnqueue, oflFinal, oflIsNetworkError, oflLoad, oflProvisionalNumber, oflReserved
+//   oflTimeout, printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers, supabase
+//   todayStr, uid, useAssistedAnomalyGate, useBackNav, useEffect, useMemo, useState
 // @exports VenteModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // Brouillon de vente : le panier en cours (produits, client, mode de paiement, remises, frais) est gardé quand on
@@ -149,7 +149,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
   };
 
   const taxLabel = TAX_SYSTEMS[settings.taxSystem]?.label || "Taxe";
-  const taxActive = settings.taxSystem !== "aucune";
+  const taxActive = settings.taxSystem !== "aucune" && !settings.tcaFranchise;
 
   const addToCart = (productId) => {
     const p = products.find((pr) => pr.id === productId);
@@ -1871,6 +1871,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
             {(settings.companyPhone || settings.companyEmail) && (
               <div style={{ fontSize: 8 }}>{[settings.companyPhone, settings.companyEmail].filter(Boolean).join(" · ")}</div>
             )}
+            {nifLigne(settings) && <div style={{ fontSize: 8 }} data-testid="print-nif">{nifLigne(settings)}</div>}
           </div>
           <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
           <div>Facture N° {printInvoice.number}</div>
@@ -1902,6 +1903,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
             {(printInvoice.payments || []).length > 0 && (
               <>Versé : {fmt(printInvoice.payments.reduce((s, p) => s + p.amount, 0))} — Solde dû : {fmt(Math.max(0, (printInvoice.total || 0) - printInvoice.payments.reduce((s, p) => s + p.amount, 0)))}<br /></>
             )}
+            {settings.tcaFranchise && <><span data-testid="print-franchise">{MENTION_FRANCHISE_TCA}</span><br /></>}
             Merci de votre confiance !
             {settings.invoiceFooterNote && settings.invoiceFooterNote.trim() && (
               <><br />{settings.invoiceFooterNote.trim()}</>
@@ -1922,6 +1924,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
                 {(settings.companyPhone || settings.companyEmail) && (
                   <div style={{ fontSize: 12, color: "#555", marginTop: 1 }}>{[settings.companyPhone, settings.companyEmail].filter(Boolean).join(" · ")}</div>
                 )}
+                {nifLigne(settings) && <div style={{ fontSize: 12, color: "#555", marginTop: 1 }} data-testid="print-nif">{nifLigne(settings)}</div>}
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -1993,6 +1996,7 @@ function VenteModule({ setCheques, accounts, entries, setEntries, products: prod
                 Versé : {fmt(printInvoice.payments.reduce((s, p) => s + p.amount, 0))} — Solde dû : {fmt(Math.max(0, (printInvoice.total || 0) - printInvoice.payments.reduce((s, p) => s + p.amount, 0)))}
               </div>
             )}
+            {settings.tcaFranchise && <div style={{ marginTop: 6 }} data-testid="print-franchise">{MENTION_FRANCHISE_TCA}</div>}
             {settings.invoiceFooterNote && settings.invoiceFooterNote.trim() && (
               <div style={{ marginTop: 6 }}>{settings.invoiceFooterNote.trim()}</div>
             )}
