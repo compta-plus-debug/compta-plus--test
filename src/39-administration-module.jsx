@@ -23,6 +23,7 @@ function AdminModule({
   const [companyEmail, setCompanyEmail] = useState(settings.companyEmail || "");
   const [companyNIF, setCompanyNIF] = useState(settings.companyNIF || "");
   const [invoicePrefixIn, setInvoicePrefixIn] = useState(settings.invoicePrefix || "");
+  const [clientAddressOnInvoice, setClientAddressOnInvoice] = useState(settings.clientAddressOnInvoice !== false);
   const [tcaFranchise, setTcaFranchise] = useState(!!settings.tcaFranchise);
   const [companyVille, setCompanyVille] = useState(settings.companyVille || "");
   const [companySecteurCode, setCompanySecteurCode] = useState(settings.companySecteurCode || "");
@@ -269,7 +270,7 @@ function AdminModule({
       showToast("Le nom n'a peut-être pas pu être enregistré côté serveur — les autres informations ont quand même été sauvegardées localement.");
       logClientError("saveCompany_exception: " + String(e), String(e && e.stack || ""), window.location.href);
     }
-    setSettings({ ...settings, companyName: finalName, companyAddress, companyPhone, companyEmail, companyNIF, invoicePrefix: invoicePrefixIn.replace(/[^A-Za-z0-9-]/g, "").slice(0, 8), tcaFranchise, companyVille, companySecteurCode, companySecteurNom, companyType, currency });
+    setSettings({ ...settings, companyName: finalName, companyAddress, companyPhone, companyEmail, companyNIF, invoicePrefix: invoicePrefixIn.replace(/[^A-Za-z0-9-]/g, "").slice(0, 8), clientAddressOnInvoice, tcaFranchise, companyVille, companySecteurCode, companySecteurNom, companyType, currency });
     showToast("Paramètres de l'entreprise enregistrés.");
   };
 
@@ -648,6 +649,7 @@ function AdminModule({
       setCompanyEmail(data.settings.companyEmail || "");
       setCompanyNIF(data.settings.companyNIF || "");
       setInvoicePrefixIn(data.settings.invoicePrefix || "");
+      setClientAddressOnInvoice(data.settings.clientAddressOnInvoice !== false);
       setTcaFranchise(!!data.settings.tcaFranchise);
       setCompanyVille(data.settings.companyVille || "");
       setCompanySecteurCode(data.settings.companySecteurCode || "");
@@ -821,6 +823,14 @@ function AdminModule({
                 <input type="checkbox" className="mt-1" checked={tcaFranchise} onChange={(e) => setTcaFranchise(e.target.checked)} data-testid="tca-franchise" />
                 <span>Entreprise en franchise de TCA (chiffre d'affaires inférieur à 10 millions de HTG)
                   <span className="block text-xs" style={{ color: "#8A8370" }}>La TCA n'est alors pas facturée et la facture porte la mention « TCA non applicable - article 193 du CGI ». La TCA payée sur vos achats n'est pas récupérable (article 193 du Code fiscal). Attention : facturer la TCA à tort vous en rend redevable. Faites confirmer par votre expert-comptable que vous êtes bien en dessous du seuil avant d'activer.</span>
+                </span>
+              </label>
+            </div>
+            <div className="mb-4">
+              <label className="flex items-start gap-2 text-sm cursor-pointer" style={{ color: "#152238" }}>
+                <input type="checkbox" checked={clientAddressOnInvoice} onChange={(e) => setClientAddressOnInvoice(e.target.checked)} className="mt-1" data-testid="admin-adresse-client-facture" />
+                <span>Afficher l'adresse du client sur la facture
+                  <span className="block text-xs" style={{ color: "#8A8370" }}>Décochez si vos clients ne souhaitent pas donner leur adresse : le champ disparaît de la caisse et l'adresse n'est plus imprimée (facture, aperçu, PDF, ticket). Le Code fiscal la prévoit : à décider avec votre expert-comptable.</span>
                 </span>
               </label>
             </div>

@@ -3,13 +3,14 @@
 // @depends AssistedPrincipleReminder, BarcodeScannerModal, BluetoothIcon, BluetoothPrinterCard
 //   CheckCircle2, ChequeDialog, Download, History, ImageIcon, Lock, MENTION_FRANCHISE_TCA, Minus
 //   OFL_EVT, OflPanel, Pencil, PendingRecommendationsBanner, Plus, Printer, ProductHistoryModal
-//   Receipt, RecordedStamp, RotateCcw, ScanLine, TAX_SYSTEMS, Trash2, X, _membership, balanceDue
-//   detectAmountAnomaly, detectDuplicateAnomaly, detectTaxAnomaly, downloadInvoicePDF, fmt
-//   invoicePrefix, isFutureDate, isLocked, makeChequeRecord, nifLigne, normalizeClientName
-//   oflCompanyId, oflEnqueue, oflFinal, oflIsNetworkError, oflLoad, oflProvisionalNumber
-//   oflReserved, oflTimeout, printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers
-//   supabase, tauxFactureTexte, todayStr, uid, useAssistedAnomalyGate, useBackNav, useEffect
-//   useMemo, useState
+//   Receipt, RecordedStamp, RotateCcw, ScanLine, TAX_SYSTEMS, Trash2, X, _membership
+//   adresseClientFacture, balanceDue, detectAmountAnomaly, detectDuplicateAnomaly
+//   detectTaxAnomaly, downloadInvoicePDF, fmt, invoicePrefix, isFutureDate, isLocked
+//   makeChequeRecord, nifLigne, normalizeClientName, oflCompanyId, oflEnqueue, oflFinal
+//   oflIsNetworkError, oflLoad, oflProvisionalNumber, oflReserved, oflTimeout
+//   printInvoiceBluetooth, resizeImage, simpleEntry, suggestSimilarTiers, supabase
+//   tauxFactureTexte, todayStr, uid, useAssistedAnomalyGate, useBackNav, useEffect, useMemo
+//   useState
 // @exports VenteModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // Brouillon de vente : le panier en cours (produits, client, mode de paiement, remises, frais) est gardé quand on
@@ -516,7 +517,7 @@ function VenteModule({ clients, setCheques, accounts, entries, setEntries, produ
       date,
       createdAt: invoiceBeingEdited ? invoiceBeingEdited.createdAt : new Date().toISOString(),
       client: client || "Client comptant",
-      ...(clientAddr.trim() ? { clientAddress: clientAddr.trim() } : {}),
+      ...(clientAddr.trim() && settings.clientAddressOnInvoice !== false ? { clientAddress: clientAddr.trim() } : {}),
       lines: cartLines.map((l) => ({ productId: l.productId, name: l.product.name, qty: l.qty, price: l.product.price, discountPct: l.discountPct || 0, discountAmt: l.discountAmt || 0, subtotal: l.subtotal, tva: l.product.tva, taxAmount: l.taxAmount })),
       globalDiscountPct: Number(globalDiscountPct) || 0,
       globalDiscountAmtInput: Number(globalDiscountAmt) || 0,
@@ -1244,7 +1245,7 @@ function VenteModule({ clients, setCheques, accounts, entries, setEntries, produ
             </div>
             <input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Nom du client (optionnel)"
               className="w-full border rounded px-2 py-1.5 text-sm mb-2" style={{ borderColor: "#DDD6C4" }} />
-            {client.trim() && (
+            {client.trim() && settings.clientAddressOnInvoice !== false && (
               <input value={clientAddr} onChange={(e) => { setClientAddr(e.target.value); setClientAddrTouched(true); }} placeholder="Adresse du client (facultatif, imprimée sur la facture)" data-testid="vente-adresse-client"
                 className="w-full border rounded px-2 py-1.5 text-sm mb-2" style={{ borderColor: "#DDD6C4" }} />
             )}
@@ -1902,7 +1903,7 @@ function VenteModule({ clients, setCheques, accounts, entries, setEntries, produ
           <div>Facture N° {printInvoice.number}</div>
           <div>{printInvoice.date}</div>
           <div>Client : {printInvoice.client || "Client comptant"}</div>
-          {printInvoice.clientAddress && <div>Adresse : {printInvoice.clientAddress}</div>}
+          {adresseClientFacture(printInvoice, settings) && <div>Adresse : {adresseClientFacture(printInvoice, settings)}</div>}
           {printInvoice.soldByName && <div>Vendeur : {printInvoice.soldByName}</div>}
           <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
           {(printInvoice.lines || []).map((l, i) => (
@@ -1964,7 +1965,7 @@ function VenteModule({ clients, setCheques, accounts, entries, setEntries, produ
             <div>
               <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Facturé à</div>
               <div style={{ fontWeight: 600, marginTop: 2 }}>{printInvoice.client || "Client comptant"}</div>
-              {printInvoice.clientAddress && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }} data-testid="print-adresse-client">{printInvoice.clientAddress}</div>}
+              {adresseClientFacture(printInvoice, settings) && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }} data-testid="print-adresse-client">{adresseClientFacture(printInvoice, settings)}</div>}
               {printInvoice.soldByName && <div style={{ fontSize: 12, color: "#7A7460", marginTop: 2 }}>Vendeur : {printInvoice.soldByName}</div>}
             </div>
             <div style={{ textAlign: "right" }}>
