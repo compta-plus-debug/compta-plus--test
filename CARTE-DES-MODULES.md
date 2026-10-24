@@ -55,6 +55,6 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 48-chargement-a-la-demande | 119 | 00-config | 49-mesures-de-performance |
 | 49-mesures-de-performance | 60 | 00-config, 48-chargement-a-la-demande, 01-garde-environnement-et-supabase | 12-application-principale |
 | 50-secteurs-et-blocs | 305 | 06-icones-et-graphiques, 08-composants-et-utilitaires, 01-garde-environnement-et-supabase, 00-config | 12-application-principale, 42-centre-de-gestion |
-| 51-ecoles | 596 | 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale, 52-ecoles-suite, 53-import-export |
+| 51-ecoles | 658 | 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale, 52-ecoles-suite, 53-import-export |
 | 52-ecoles-suite | 249 | 06-icones-et-graphiques, 51-ecoles, 10-formatage-impression-et-pdf, 07-constantes-metier, 08-composants-et-utilitaires, 00-config | 51-ecoles, 53-import-export |
 | 53-import-export | 683 | 51-ecoles, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
