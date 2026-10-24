@@ -431,6 +431,7 @@ function App() {
   const readOnly = role === "Lecture seule";
   const secteursActifs = secteursDroits(secteurs, { planTier, groupId, planStatus }).actifs;
   const ecolesActif = secteursActifs.includes("ecoles");
+  const etabKind = ((ecole || []).find((r) => r && r.type === "etab") || {}).kind || "ecole"; // type d'établissement du bloc Éducation (noms des rôles)
   const ieActif = secteursActifs.includes("import_export");
   const modulesDuRole = allowedModulesFor(role, settings); // null = accès à tous les modules
   // Secrétaire-caissier(ère) : le rôle Vendeur d'une école accède aussi au module Écoles (encaissements seulement, voir le module)
@@ -2498,7 +2499,7 @@ function App() {
           {readOnly ? (
             <span style={{ color: "#D9A441" }}>{isAccountant && canAdjust ? "Mode consultation — vous pouvez passer des écritures de régularisation dans Comptabilité." : (espace === "ecole" && !isAccountant ? "Suppléant — mode consultation : les modifications sont désactivées." : "Mode consultation — les modifications sont désactivées.")}</span>
           ) : (
-            <>Rôle : {roleLabel(role, espace === "ecole")}{role === "Vendeur" && currentStationForSidebar?.activeSellerName ? ` — ${currentStationForSidebar.activeSellerName}` : ""}</>
+            <>Rôle : {roleLabel(role, espace === "ecole" ? etabKind : false)}{role === "Vendeur" && currentStationForSidebar?.activeSellerName ? ` — ${currentStationForSidebar.activeSellerName}` : ""}</>
           )}
           {planStatus === "trial" && trialDaysLeft !== null && (
             <div className="mt-1" style={{ color: trialDaysLeft <= 5 ? "#D9A441" : "#5C6B8C" }}>
@@ -2867,7 +2868,7 @@ function App() {
         )}
         {active === "admin" && role === "Administrateur" && (
           <AdminModule
-            ecoleLabels={ecolesActif}
+            ecoleLabels={ecolesActif ? etabKind : false}
             settings={settings}
             setSettings={setSettings}
             users={users}
