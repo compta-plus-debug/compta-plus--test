@@ -1,7 +1,7 @@
 // ═══ MODULE ═══
 // @module Ecoles
 // @depends EcolesRapports, EcolesRelances, EcolesRemises, ecAppliquerRemisesAuxNouvelles, fmt
-//   isFutureDate, isLocked, todayStr, uid, useBrouillon, useState
+//   isFutureDate, isLocked, todayStr, uid, useBrouillon, useEffect, useState
 // @exports EcolesModule, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecId, ecInput, ecR2, ecReste, ecRows
 // ═══ FIN DE L'EN-TÊTE ═══
 // Bloc Écoles, première version : années scolaires, classes, familles et élèves, grille de frais, échéancier,
@@ -21,6 +21,7 @@ const EC_COMPTES = {
   "7061": { name: "Frais de scolarité (écolage)", type: "Produit" },
   "7062": { name: "Frais d'inscription et de réinscription", type: "Produit" },
   "7068": { name: "Autres frais scolaires (cantine, transport, uniformes, livres)", type: "Produit" },
+  "709": { name: "Rabais, remises et bourses accordés (scolarité)", type: "Produit" },
 };
 const EC_PRODUITS = [["7061", "Scolarité (écolage)"], ["7062", "Inscription / réinscription"], ["7068", "Autres frais scolaires"]];
 // Identifiants en texte : les listes déroulantes renvoient du texte, la comparaison doit donc être faite sur du texte.
@@ -92,7 +93,8 @@ function ecRepartir(charges, familyId, studentId, amount, date) {
   return { alloc, left };
 }
 
-function ecAjouterComptes(accounts, setAccounts, codes) {
+function ecAjouterComptes(accounts, setAccounts, codes, role) {
+  if (role === "Vendeur") return; // pas le droit d'écrire le plan comptable
   const missing = codes.filter((k) => EC_COMPTES[k] && !accounts.some((a) => a.code === k)).map((k) => ({ code: k, name: EC_COMPTES[k].name, type: EC_COMPTES[k].type }));
   if (missing.length) setAccounts((prev) => [...prev, ...missing.filter((m) => !prev.some((a) => a.code === m.code))]);
 }
@@ -107,7 +109,14 @@ const ecEligible = (f, s) => (!f.classIds || f.classIds.length === 0 || f.classI
 
 function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
-  const [tab, setTab] = useState("apercu");
+  // Secrétaire-caissier(ère) = rôle Vendeur : encaisse, consulte les élèves et relance les impayés ; ne modifie ni la grille, ni les années, ni les classes, et n'annule rien.
+  const secretaire = role === "Vendeur";
+  const canCash = canEdit || secretaire;
+  const [tab, setTab] = useState(role === "Vendeur" ? "recus" : "apercu");
+  // Les comptes de l'école sont créés par un administrateur ou un gestionnaire (le rôle Vendeur n'a pas le droit d'écrire le plan comptable)
+  useEffect(() => {
+    if (canEdit && typeof setAccounts === "function" && Array.isArray(accounts) && accounts.length > 0) ecAjouterComptes(accounts, setAccounts, ["4111", "7061", "7062", "7068", "709"]);
+  }, [canEdit, accounts.length]);
   const years = ecRows(ecole, "year");
   const classes = ecRows(ecole, "class");
   const families = ecRows(ecole, "family");
@@ -124,7 +133,8 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const yCharges = year ? charges.filter((c) => c.yearId === year.id && c.status !== "annulée") : [];
   const [printRec, setPrintRec] = useState(null);
 
-  const tabs = [["apercu", "Vue d'ensemble"], ["annees", "Années et classes"], ["eleves", "Familles et élèves"], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"], ["relances", "Impayés et relances"], ["remises", "Bourses et rabais"], ["rapports", "Rapports"]];
+  const tabsTous = [["apercu", "Vue d'ensemble"], ["annees", "Années et classes"], ["eleves", "Familles et élèves"], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"], ["relances", "Impayés et relances"], ["remises", "Bourses et rabais"], ["rapports", "Rapports"]];
+  const tabs = secretaire ? tabsTous.filter(([id]) => ["eleves", "recus", "relances"].includes(id)) : tabsTous;
 
   // ───────── Vue d'ensemble ─────────
   const attendu = ecR2(yCharges.reduce((s, c) => s + c.amount, 0));
@@ -408,7 +418,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const famCharges = fp.familyId ? charges.filter((c) => c.familyId === fp.familyId && c.status !== "annulée") : [];
   const famReste = ecR2(famCharges.reduce((s, c) => s + ecReste(c), 0));
   const encaisser = () => {
-    if (!canEdit) return;
+    if (!canCash) return;
     const montant = ecR2(fp.amount);
     if (!fp.familyId) { showToast("Choisissez la famille."); return; }
     if (!(montant > 0)) { showToast("Indiquez le montant reçu."); return; }
@@ -430,7 +440,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     const aSolder = ecR2(alloc.filter((a) => !a.toAdvance).reduce((s, a) => s + a.amount, 0));
     const enAvance = ecR2(alloc.filter((a) => a.toAdvance).reduce((s, a) => s + a.amount, 0));
     const compte = fp.mode === "banque" ? "512" : "530";
-    ecAjouterComptes(accounts, setAccounts, codes);
+    ecAjouterComptes(accounts, setAccounts, codes, role);
     const fam = families.find((f) => f.id === fp.familyId) || {};
     let recId = null;
     if (recEntry) recId = postEntry(fp.date, "Frais scolaires — échéances échues au " + ecDateFr(fp.date) + " (" + fam.name + ")", recEntry.lines, { kind: "ecole" }).id;
@@ -476,7 +486,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   };
   const Recus = () => (
     <div>
-      {canEdit && (<div className="p-3 rounded mb-5" style={{ background: "#fff", border: "1px solid #EEE9DA" }}>
+      {canCash && (<div className="p-3 rounded mb-5" style={{ background: "#fff", border: "1px solid #EEE9DA" }}>
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvel encaissement</div>
         <div className="grid md:grid-cols-6 gap-2 items-end">
           <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Famille</label><select value={fp.familyId} onChange={(e) => setFp({ ...fp, familyId: e.target.value, studentId: "" })} data-testid="ecole-paie-famille" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
@@ -534,7 +544,8 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
         <div><div className="display text-2xl" style={{ color: "#152238" }}>Écoles</div><div className="text-xs" style={{ color: "#8A8370" }}>Années scolaires, élèves, frais, échéances et reçus{year ? " — année : " + year.label : ""}</div></div>
         {years.length > 1 && (<select value={year ? year.id : ""} onChange={(e) => setYearId(e.target.value)} className="border rounded px-2 py-1.5 text-sm" style={ecBorder} data-testid="ecole-annee-choix">{years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select>)}
       </div>
-      {!canEdit && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données de l'école.</div>}
+      {secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#E6F1EE", color: "#0F4F44" }} data-testid="ecole-secretaire">Espace secrétaire-caissier(ère) : vous encaissez, consultez les élèves et relancez les impayés. La grille de frais, les classes et l'annulation des reçus sont réservés à la direction.</div>}
+      {!canEdit && !secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données de l'école.</div>}
       <div className="flex flex-wrap gap-1 mb-5" style={{ borderBottom: "1px solid #E4DFD1" }}>
         {tabs.map(([id, l]) => (<button key={id} onClick={() => setTab(id)} data-testid={"ecole-tab-" + id} className="px-3 py-2 text-sm" style={{ color: tab === id ? "#152238" : "#8A8370", borderBottom: tab === id ? "2px solid #C9A24B" : "2px solid transparent", fontWeight: tab === id ? 600 : 400 }}>{l}</button>))}
       </div>
@@ -544,7 +555,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
       {tab === "frais" && Frais()}
       {tab === "echeances" && Echeances()}
       {tab === "recus" && Recus()}
-      {tab === "relances" && <EcolesRelances ecole={ecole} setEcole={setEcole} year={year} families={families} students={students} charges={charges} canAct={canEdit} today={today} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} settings={settings} />}
+      {tab === "relances" && <EcolesRelances ecole={ecole} setEcole={setEcole} year={year} families={families} students={students} charges={charges} canAct={canCash} today={today} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} settings={settings} />}
       {tab === "remises" && <EcolesRemises ecole={ecole} setEcole={setEcole} year={year} students={students} fees={fees} charges={charges} canEdit={canEdit} accounts={accounts} setAccounts={setAccounts} setEntries={setEntries} settings={settings} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />}
       {tab === "rapports" && <EcolesRapports year={year} classes={classes} students={students} families={families} charges={charges} receipts={receipts} today={today} showToast={showToast} />}
       {printRec && (
