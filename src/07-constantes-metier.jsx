@@ -35,7 +35,7 @@ const ROLE_LABELS = { "Éditeur": "Gestionnaire", "Lecture seule": "Consultant" 
 const ROLE_LABELS_ECOLE = {
   ecole: { "Vendeur": "Secrétaire-caissier(ère)", "Éditeur": "Directeur", "Lecture seule": "Suppléant" },
   pro: { "Vendeur": "Secrétaire-caissier(ère)", "Éditeur": "Directeur", "Lecture seule": "Directeur adjoint" },
-  univ: { "Vendeur": "Secrétaire-caissier(ère)", "Éditeur": "Recteur", "Lecture seule": "Vice-recteur" },
+  univ: { "Vendeur": "Secrétaire général(e)", "Éditeur": "Doyen", "Lecture seule": "Vice-doyen" },
 };
 // 2e argument : false = noms habituels ; true ou « ecole » = école ; « pro » ou « univ » = type d'établissement.
 const roleLabel = (r, ecole) => (ecole && (ROLE_LABELS_ECOLE[ecole === true ? "ecole" : ecole] || ROLE_LABELS_ECOLE.ecole)[r]) || ROLE_LABELS[r] || r;

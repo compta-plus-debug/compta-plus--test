@@ -1,7 +1,8 @@
 // ═══ MODULE ═══
 // @module Ecoles
-// @depends EcolesRapports, EcolesRelances, EcolesRemises, ecAppliquerRemisesAuxNouvelles, fmt
-//   isFutureDate, isLocked, todayStr, uid, useBrouillon, useEffect, useState
+// @depends EcolesRapports, EcolesRelances, EcolesRemises, _membership, ecAppliquerRemisesAuxNouvelles
+//   fmt, isFutureDate, isLocked, roleLabel, supabase, todayStr, uid, useBrouillon, useEffect
+//   useState
 // @exports EC_CSS, EC_VOCAB, EcolesModule, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecId, ecInput
 //   ecPastille, ecR2, ecReste, ecRows
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -43,9 +44,9 @@ const ecReste = (c) => ecR2((Number(c.amount) || 0) - (Number(c.paid) || 0));
 // Vocabulaire selon le type d'établissement (le bloc s'appelle « Éducation » : école, formation professionnelle, université)
 const EC_TYPES_ETAB = [["ecole", "École (primaire, secondaire)"], ["pro", "Centre de formation professionnelle"], ["univ", "Université ou institut supérieur"]];
 const EC_VOCAB = {
-  ecole: { annee: "année scolaire", Annees: "Années scolaires", Classe: "Classe", Classes: "Classes", classe: "classe", Eleve: "Élève", Eleves: "Élèves", eleve: "élève", Famille: "Famille", Familles: "Familles", famille: "famille", FamilleResp: "Famille ou responsable", eleveDet: "l'élève", classeDet: "la classe", famDet: "la famille", etabDet: "l'école", etabTitre: "École", slug: "ecole" },
-  pro: { annee: "année de formation", Annees: "Années de formation", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Apprenant", Eleves: "Apprenants", eleve: "apprenant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (apprenant, famille ou entreprise)", eleveDet: "l'apprenant", classeDet: "la filière", famDet: "le payeur", etabDet: "le centre de formation", etabTitre: "Centre de formation", slug: "pro" },
-  univ: { annee: "année académique", Annees: "Années académiques", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Étudiant", Eleves: "Étudiants", eleve: "étudiant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (étudiant, famille ou employeur)", eleveDet: "l'étudiant", classeDet: "la filière", famDet: "le payeur", etabDet: "l'université", etabTitre: "Université", slug: "univ" },
+  ecole: { Annee: "Année scolaire", annee: "année scolaire", Annees: "Années scolaires", Classe: "Classe", Classes: "Classes", classe: "classe", Eleve: "Élève", Eleves: "Élèves", eleve: "élève", Famille: "Famille", Familles: "Familles", famille: "famille", FamilleResp: "Famille ou responsable", eleveDet: "l'élève", classeDet: "la classe", famDet: "la famille", etabDet: "l'école", etabTitre: "École", slug: "ecole" },
+  pro: { Annee: "Année de formation", annee: "année de formation", Annees: "Années de formation", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Apprenant", Eleves: "Apprenants", eleve: "apprenant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (apprenant, famille ou entreprise)", eleveDet: "l'apprenant", classeDet: "la filière", famDet: "le payeur", etabDet: "le centre de formation", etabTitre: "Centre de formation", slug: "pro" },
+  univ: { Annee: "Année académique", annee: "année académique", Annees: "Années académiques", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Étudiant", Eleves: "Étudiants", eleve: "étudiant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (étudiant, famille ou employeur)", eleveDet: "l'étudiant", classeDet: "la filière", famDet: "le payeur", etabDet: "l'université", etabTitre: "Université", slug: "univ" },
 };
 
 // Échéances d'un frais pour un élève (identifiants stables : le même frais n'est jamais appliqué deux fois au même élève).
@@ -156,6 +157,21 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
   });
   // Secrétaire-caissier(ère) = rôle Vendeur : encaisse, consulte les élèves et relance les impayés ; ne modifie ni la grille, ni les années, ni les classes, et n'annule rien.
   const secretaire = role === "Vendeur";
+  // Modifier ou activer une année : réservé à l'administrateur principal de l'entreprise
+  const [principal, setPrincipal] = useState(false);
+  useEffect(() => {
+    let vivant = true;
+    (async () => {
+      try {
+        const cid = _membership && _membership.companyId;
+        if (!cid || !currentUserEmail || role !== "Administrateur") { if (vivant) setPrincipal(false); return; }
+        const { data } = await supabase.from("company_members").select("email, is_primary_admin").eq("company_id", cid);
+        const moi = (data || []).find((m) => String(m.email || "").toLowerCase() === String(currentUserEmail).toLowerCase());
+        if (vivant) setPrincipal(!!(moi && moi.is_primary_admin));
+      } catch (e) { if (vivant) setPrincipal(false); }
+    })();
+    return () => { vivant = false; };
+  }, [currentUserEmail, role]);
   const canCash = canEdit || secretaire;
   const [tab, setTab] = useState(role === "Vendeur" ? "recus" : "apercu");
   // Les comptes de l'école sont créés par un administrateur ou un gestionnaire (le rôle Vendeur n'a pas le droit d'écrire le plan comptable)
@@ -231,6 +247,17 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
     setYearId(id); setFy({ label: "", start: "", end: "" });
     showToast(V.annee.charAt(0).toUpperCase() + V.annee.slice(1) + " créée et activée."); logAudit("Écoles", "Année scolaire créée", label);
   };
+  const [edAnnee, setEdAnnee] = useState(null);
+  const enregistrerAnnee = () => {
+    if (!principal || !edAnnee) { showToast("Seul l'administrateur principal peut modifier une " + V.annee + "."); return; }
+    const label = (edAnnee.label || "").trim();
+    if (!label) { showToast("Indiquez le nom de la " + V.annee + "."); return; }
+    if (years.some((y) => y.id !== edAnnee.id && y.label.toLowerCase() === label.toLowerCase())) { showToast("Une autre " + V.annee + " porte déjà ce nom."); return; }
+    if (edAnnee.start && edAnnee.end && edAnnee.end < edAnnee.start) { showToast("La date de fin ne peut pas précéder la date de début."); return; }
+    setEcole((prev) => (prev || []).map((r) => (r.id === edAnnee.id ? { ...r, label, start: edAnnee.start || "", end: edAnnee.end || "" } : r)));
+    logAudit("Éducation", V.Annee + " modifiée", label);
+    setEdAnnee(null); showToast(V.Annee + " modifiée.");
+  };
   const setActiveYear = (id) => { setEcole((prev) => (prev || []).map((r) => (r.type === "year" && (r.etab || "ecole") === kind ? { ...r, active: r.id === id } : r))); setYearId(id); };
   const addClass = () => {
     if (!canEdit) return;
@@ -304,6 +331,22 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
     const ids = new Set(siens.map((c) => c.id));
     setEcole((prev) => (prev || []).filter((r) => r.id !== en.id && !(r.type === "charge" && ids.has(r.id))));
   };
+  const [rs, setRs] = useState({ studentId: "", semesterId: "", motif: "" });
+  const renvoyerSemestre = () => {
+    const st = students.find((x) => x.id === rs.studentId), sm = semesters.find((x) => x.id === rs.semesterId);
+    if (!canEdit) return;
+    if (!st) { showToast("Choisissez " + V.eleveDet + "."); return; }
+    if (!sm) { showToast("Choisissez le semestre."); return; }
+    const motif = rs.motif.trim();
+    if (motif.length < 5) { showToast("Indiquez le motif du renvoi (quelques mots au moins) : il est obligatoire."); return; }
+    const enr = enrolls.filter((x) => x.studentId === st.id && x.semesterId === sm.id && (x.status === "cours" || x.status === "reprendre"));
+    const enrIds = enr.map((x) => x.id);
+    const aAnnuler = new Set(charges.filter((c) => c.studentId === st.id && c.status !== "annulée" && !c.recognized && !((c.paid || 0) > 0) && (enrIds.some((id) => String(c.id).includes(":" + id + ":")) || fees.some((f) => f.id === c.feeId && f.semesterId === sm.id))).map((c) => c.id));
+    setEcole((prev) => [...(prev || []).map((r) => (r.type === "enroll" && enrIds.includes(r.id) ? { ...r, status: "renvoye" } : (r.type === "charge" && aAnnuler.has(r.id) ? { ...r, status: "annulée" } : r))), { type: "renvoi", id: ecId(), studentId: st.id, semesterId: sm.id, semesterLabel: sm.label, motif, date: today, by: currentUserEmail || "", createdAt: new Date().toISOString() }]);
+    setRs({ studentId: "", semesterId: rs.semesterId, motif: "" });
+    showToast(stuName(st.id) + " renvoyé(e) du " + sm.label + " : " + enr.length + " inscription(s) à des cours et " + aAnnuler.size + " échéance(s) à venir annulée(s).");
+    logAudit("Éducation", "Renvoi d'un semestre", stuName(st.id) + " — " + sm.label + " — motif : " + motif);
+  };
   const Cours = () => {
     const anneeEnrolls = enrolls.filter((x) => year && x.yearId === year.id);
     const stActifs = students.filter((x) => year && x.yearId === year.id && x.status !== "sorti");
@@ -339,8 +382,17 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
         </div>)}
         <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">{V.Eleve}</th><th>Cours</th><th className="text-right">Crédits</th><th>Semestre</th><th>Résultat</th><th></th></tr></thead>
           <tbody>{anneeEnrolls.map((en) => (<tr key={en.id} style={{ borderTop: "1px solid #EEE9DA", opacity: en.status === "repris" ? 0.6 : 1 }} data-testid="ecole-inscr-ligne"><td className="py-1.5">{stuName(en.studentId)}</td><td>{en.courseName}{en.retakeOf ? " (reprise)" : ""}</td><td className="text-right tabular">{en.credits}</td><td className="text-xs">{en.semesterLabel || "—"}</td>
-            <td>{en.status === "repris" ? ecPastille("Repris", "neutre") : canEdit ? <select value={en.status} onChange={(e) => statutCours(en, e.target.value)} data-testid="ecole-inscr-statut" className="border rounded px-1 py-0.5 text-xs" style={ecBorder}><option value="cours">En cours</option><option value="valide">Validé</option><option value="reprendre">À reprendre</option></select> : ({ cours: "En cours", valide: "Validé", reprendre: "À reprendre" }[en.status] || en.status)}</td>
-            <td className="text-right whitespace-nowrap">{canEdit && en.status === "reprendre" && (<><select value={reprise[en.id] !== undefined ? reprise[en.id] : en.semesterId} onChange={(e) => setReprise({ ...reprise, [en.id]: e.target.value })} className="border rounded px-1 py-0.5 text-xs mr-2" style={ecBorder}><option value="">Sans semestre</option>{semesters.filter((x) => x.yearId === en.yearId).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select><button onClick={() => reinscrire(en)} className="text-xs underline mr-3" style={{ color: "#0F6B5C" }} data-testid="ecole-inscr-reinscrire">Réinscrire</button></>)}{canEdit && en.status !== "repris" && <button onClick={() => delInscription(en)} className="text-xs" style={{ color: "#A6432F" }} data-testid="ecole-inscr-supprimer">Supprimer</button>}</td></tr>))}</tbody></table></div>
+            <td>{en.status === "renvoye" ? ecPastille("Renvoyé du semestre", "alerte") : en.status === "repris" ? ecPastille("Repris", "neutre") : canEdit ? <select value={en.status} onChange={(e) => statutCours(en, e.target.value)} data-testid="ecole-inscr-statut" className="border rounded px-1 py-0.5 text-xs" style={ecBorder}><option value="cours">En cours</option><option value="valide">Validé</option><option value="reprendre">À reprendre</option></select> : ({ cours: "En cours", valide: "Validé", reprendre: "À reprendre" }[en.status] || en.status)}</td>
+            <td className="text-right whitespace-nowrap">{canEdit && en.status === "reprendre" && (<><select value={reprise[en.id] !== undefined ? reprise[en.id] : en.semesterId} onChange={(e) => setReprise({ ...reprise, [en.id]: e.target.value })} className="border rounded px-1 py-0.5 text-xs mr-2" style={ecBorder}><option value="">Sans semestre</option>{semesters.filter((x) => x.yearId === en.yearId).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select><button onClick={() => reinscrire(en)} className="text-xs underline mr-3" style={{ color: "#0F6B5C" }} data-testid="ecole-inscr-reinscrire">Réinscrire</button></>)}{canEdit && en.status !== "repris" && en.status !== "renvoye" && <button onClick={() => delInscription(en)} className="text-xs" style={{ color: "#A6432F" }} data-testid="ecole-inscr-supprimer">Supprimer</button>}</td></tr>))}</tbody></table></div>
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Renvoi d'un semestre</div>
+        {canEdit && year && (<div className="ec-card p-3 mb-3 grid md:grid-cols-4 gap-2 items-end" data-testid="ecole-renvoi-sem">
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>{V.Eleve}</label><select value={rs.studentId} onChange={(e) => setRs({ ...rs, studentId: e.target.value })} data-testid="ecole-renvoi-sem-eleve" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{stActifs.map((x) => <option key={x.id} value={x.id}>{stuName(x.id)}</option>)}</select></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Semestre</label><select value={rs.semesterId} onChange={(e) => setRs({ ...rs, semesterId: e.target.value })} data-testid="ecole-renvoi-sem-semestre" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{semesters.filter((x) => x.yearId === year.id).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Motif (obligatoire)</label><input value={rs.motif} onChange={(e) => setRs({ ...rs, motif: e.target.value })} data-testid="ecole-renvoi-sem-motif" className={ecInput} style={ecBorder} /></div>
+          <button onClick={renvoyerSemestre} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-renvoi-sem-valider">Renvoyer du semestre</button>
+        </div>)}
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">{V.Eleve}</th><th>Semestre</th><th>Date</th><th>Motif</th></tr></thead>
+          <tbody>{ecRows(ecole, "renvoi").map((x) => (<tr key={x.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-renvoi-sem-ligne"><td className="py-1.5">{stuName(x.studentId)}</td><td>{x.semesterLabel}</td><td>{ecDateFr(x.date)}</td><td>{x.motif}</td></tr>))}</tbody></table></div>
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Progression en crédits</div>
         <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">{V.Eleve}</th><th>{V.Classe}</th><th className="text-right">Validés</th><th className="text-right">En cours</th><th className="text-right">À reprendre</th><th className="text-right">Requis</th><th>Situation</th></tr></thead>
           <tbody>{progression.map((x) => (<tr key={x.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-progression-ligne"><td className="py-1.5">{x.nom}</td><td className="text-xs">{x.classe}</td><td className="text-right tabular">{x.valides}</td><td className="text-right tabular">{x.encours}</td><td className="text-right tabular">{x.aRepren}</td><td className="text-right tabular">{x.requis || "—"}</td>
@@ -383,9 +435,17 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
           <div key={y.id} className="flex items-center gap-2 text-sm p-2 rounded" style={{ background: y.id === (year && year.id) ? "#E6F1EE" : "#fff", border: "1px solid #EEE9DA" }} data-testid="ecole-annee-ligne">
             <span className="flex-1"><b>{y.label}</b>{y.start ? " — du " + ecDateFr(y.start) : ""}{y.end ? " au " + ecDateFr(y.end) : ""}{y.active ? " (année active)" : ""}</span>
             {y.id !== (year && year.id) && <button onClick={() => setYearId(y.id)} className="text-xs underline">Voir</button>}
-            {canEdit && !y.active && <button onClick={() => setActiveYear(y.id)} className="text-xs underline">Activer</button>}
+            {principal && !y.active && <button onClick={() => setActiveYear(y.id)} className="text-xs underline" data-testid="ecole-annee-activer">Activer</button>}
+            {principal && <button onClick={() => setEdAnnee({ id: y.id, label: y.label, start: y.start || "", end: y.end || "" })} className="text-xs underline" data-testid="ecole-annee-modifier">Modifier</button>}
           </div>))}
       </div>
+      {edAnnee && principal && (<div className="ec-card p-3 mb-4 grid md:grid-cols-4 gap-2 items-end" data-testid="ecole-annee-edition">
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom</label><input value={edAnnee.label} onChange={(e) => setEdAnnee({ ...edAnnee, label: e.target.value })} data-testid="ecole-annee-edit-nom" className={ecInput} style={ecBorder} /></div>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={edAnnee.start} onChange={(e) => setEdAnnee({ ...edAnnee, start: e.target.value })} className={ecInput} style={ecBorder} /></div>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin</label><input type="date" value={edAnnee.end} onChange={(e) => setEdAnnee({ ...edAnnee, end: e.target.value })} className={ecInput} style={ecBorder} /></div>
+        <div className="flex gap-2"><button onClick={enregistrerAnnee} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-annee-enregistrer">Enregistrer</button><button onClick={() => setEdAnnee(null)} className="px-3 py-2 rounded text-sm" style={ecBtn}>Annuler</button></div>
+      </div>)}
+      {canEdit && !principal && years.length > 0 && <div className="text-xs mb-3" style={{ color: "#7A7460" }}>Seul l'administrateur principal peut modifier ou activer une {V.annee}.</div>}
       {canEdit && (<div className="grid md:grid-cols-4 gap-2 mb-6 items-end">
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom de la période (année)</label><input value={fy.label} onChange={(e) => setFy({ ...fy, label: e.target.value })} placeholder="2026-2027" data-testid="ecole-annee-nom" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={fy.start} onChange={(e) => setFy({ ...fy, start: e.target.value })} className={ecInput} style={ecBorder} /></div>
@@ -487,10 +547,25 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
     const figees = siens.filter((c) => c.status !== "annulée" && (c.recognized || (c.paid || 0) > 0));
     if (figees.length) { showToast(figees.length + " échéance(s) de " + stuName(s.id) + " sont déjà constatées en comptabilité ou payées : suppression impossible. Utilisez « Marquer sorti » pour le retirer des listes en gardant l'historique."); return; }
     if (typeof window !== "undefined" && window.confirm && !window.confirm("Supprimer " + stuName(s.id) + " (" + V.eleve + ") et ses échéances non payées ?")) return;
-    setEcole((prev) => (prev || []).filter((r) => r.id !== s.id && !((r.type === "charge" || r.type === "enroll" || r.type === "discount") && r.studentId === s.id)));
+    setEcole((prev) => (prev || []).filter((r) => r.id !== s.id && !((r.type === "charge" || r.type === "enroll" || r.type === "discount" || r.type === "renvoi") && r.studentId === s.id)));
     showToast(V.Eleve + " supprimé(e)."); logAudit("Éducation", V.Eleve + " supprimé(e)", stuName(s.id));
   };
-  const sortirEleve = (s) => { if (!canEdit) return; setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, status: s.status === "sorti" ? "actif" : "sorti" } : r))); };
+  const sortirEleve = (s) => { if (!canEdit) return; setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? (s.status === "sorti" ? { ...r, status: "actif", renvoi: null, anciensRenvois: s.renvoi ? [...(r.anciensRenvois || []), s.renvoi] : r.anciensRenvois } : { ...r, status: "sorti" }) : r))); };
+  // Renvoi : l'inscrit quitte la classe et les listes, avec un motif obligatoire (conservé pour le dossier). Les échéances déjà constatées ou payées restent dues ; les autres sont annulées.
+  const [renvoiSel, setRenvoiSel] = useState(null);
+  const [renvoiMotif, setRenvoiMotif] = useState("");
+  const renvoyer = () => {
+    const st = students.find((x) => x.id === renvoiSel);
+    if (!canEdit || !st) return;
+    const motif = renvoiMotif.trim();
+    if (motif.length < 5) { showToast("Indiquez le motif du renvoi (quelques mots au moins) : il est obligatoire."); return; }
+    const aAnnuler = new Set(charges.filter((c) => c.studentId === st.id && c.status !== "annulée" && !c.recognized && !((c.paid || 0) > 0)).map((c) => c.id));
+    const gardees = charges.filter((c) => c.studentId === st.id && c.status !== "annulée" && (c.recognized || (c.paid || 0) > 0)).length;
+    setEcole((prev) => (prev || []).map((r) => (r.id === st.id ? { ...r, status: "sorti", renvoi: { motif, date: today, by: currentUserEmail || "" } } : (r.type === "charge" && aAnnuler.has(r.id) ? { ...r, status: "annulée" } : (r.type === "enroll" && r.studentId === st.id && (r.status === "cours" || r.status === "reprendre") ? { ...r, status: "renvoye" } : r)))));
+    setRenvoiSel(null); setRenvoiMotif("");
+    showToast(stuName(st.id) + " renvoyé(e) : " + aAnnuler.size + " échéance(s) à venir annulée(s)" + (gardees ? " ; " + gardees + " échéance(s) déjà constatée(s) ou payée(s) restent dues." : "."));
+    logAudit("Éducation", V.Eleve + " renvoyé(e)", stuName(st.id) + " — motif : " + motif);
+  };
   const Eleves = () => (
     <div>
       <div className="display text-base mb-2" style={{ color: "#152238" }}>{V.Familles}</div>
@@ -514,11 +589,16 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
         <tbody>{students.filter((s) => year && s.yearId === year.id).map((s) => {
           const reste = ecR2(charges.filter((c) => c.studentId === s.id && c.status !== "annulée").reduce((t, c) => t + ecReste(c), 0));
           return (<tr key={s.id} style={{ borderTop: "1px solid #EEE9DA", opacity: s.status === "sorti" ? 0.55 : 1 }} data-testid="ecole-eleve-ligne">
-            <td className="py-1.5 tabular text-xs">{s.matricule}</td><td>{(s.firstName + " " + s.lastName).trim()}{s.status === "sorti" ? " (sorti)" : ""}</td><td>{famName(s.familyId)}</td>
+            <td className="py-1.5 tabular text-xs">{s.matricule}</td><td>{(s.firstName + " " + s.lastName).trim()}{s.status === "sorti" ? (s.renvoi ? " (renvoyé le " + ecDateFr(s.renvoi.date) + " — " + s.renvoi.motif + ")" : " (sorti)") : ""}</td><td>{famName(s.familyId)}</td>
             <td>{canEdit ? <select value={s.classId} onChange={(e) => changeClass(s, e.target.value)} className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{classes.filter((c) => c.yearId === s.yearId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select> : className(s.classId)}</td>
             {sup && <td className="text-right">{canEdit ? <input type="number" min="0" value={s.credits || ""} onChange={(e) => changeCredits(s, e.target.value)} data-testid="ecole-eleve-credits-ligne" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 64 }} /> : (s.credits || "—")}</td>}
-            <td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && fees.filter((f) => f.optional && f.yearId === s.yearId && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId))).map((f) => <label key={f.id} className="text-xs mr-3 whitespace-nowrap"><input type="checkbox" checked={(s.options || []).includes(f.id)} onChange={() => basculerOption(s, f)} data-testid="ecole-eleve-option" /> {f.label}</label>)}{canEdit && <button onClick={() => sortirEleve(s)} className="text-xs underline">{s.status === "sorti" ? "Réintégrer" : "Marquer sorti"}</button>}{canEdit && <button onClick={() => delEleve(s)} className="text-xs underline ml-3" style={{ color: "#A6432F" }} data-testid="ecole-eleve-supprimer">Supprimer</button>}</td></tr>);
+            <td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && fees.filter((f) => f.optional && f.yearId === s.yearId && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId))).map((f) => <label key={f.id} className="text-xs mr-3 whitespace-nowrap"><input type="checkbox" checked={(s.options || []).includes(f.id)} onChange={() => basculerOption(s, f)} data-testid="ecole-eleve-option" /> {f.label}</label>)}{canEdit && <button onClick={() => sortirEleve(s)} className="text-xs underline">{s.status === "sorti" ? "Réintégrer" : "Marquer sorti"}</button>}{canEdit && s.status !== "sorti" && <button onClick={() => { setRenvoiSel(s.id); setRenvoiMotif(""); }} className="text-xs underline ml-3" style={{ color: "#A6432F" }} data-testid="ecole-eleve-renvoyer">Renvoyer</button>}{canEdit && <button onClick={() => delEleve(s)} className="text-xs underline ml-3" style={{ color: "#A6432F" }} data-testid="ecole-eleve-supprimer">Supprimer</button>}</td></tr>);
         })}</tbody></table></div>
+      {renvoiSel && canEdit && (<div className="ec-card p-3 mt-3 flex flex-wrap items-end gap-3" data-testid="ecole-renvoi-form">
+        <div className="flex-1 min-w-[260px]"><label className="text-xs" style={{ color: "#8A8370" }}>Motif du renvoi de {stuName(renvoiSel)} (obligatoire)</label><input value={renvoiMotif} onChange={(e) => setRenvoiMotif(e.target.value)} data-testid="ecole-renvoi-motif" className={ecInput} style={ecBorder} /></div>
+        <button onClick={renvoyer} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-renvoi-valider">Confirmer le renvoi</button>
+        <button onClick={() => setRenvoiSel(null)} className="px-3 py-2 rounded text-sm" style={ecBtn}>Annuler</button>
+      </div>)}
       {year && students.filter((s) => s.yearId === year.id).length === 0 && <div className="text-sm mt-2" style={{ color: "#8A8370" }}>Aucun {V.eleve} pour cette année.</div>}
     </div>
   );
@@ -757,7 +837,7 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
         <div><div className="display text-2xl" style={{ color: "#152238" }}>Éducation</div><div className="text-xs" style={{ color: "#8A8370" }}>{V.Annees}, {V.Eleves.toLowerCase()}, frais, échéances et reçus{year ? " — année : " + year.label : ""}</div></div>
         {years.length > 1 && (<select value={year ? year.id : ""} onChange={(e) => setYearId(e.target.value)} className="border rounded px-2 py-1.5 text-sm" style={ecBorder} data-testid="ecole-annee-choix">{years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select>)}
       </div>
-      {secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#E6F1EE", color: "#0F4F44" }} data-testid="ecole-secretaire">Espace secrétaire-caissier(ère) : vous encaissez, consultez les élèves et relancez les impayés. La grille de frais, les classes et l'annulation des reçus sont réservés à la direction.</div>}
+      {secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#E6F1EE", color: "#0F4F44" }} data-testid="ecole-secretaire">Espace {roleLabel("Vendeur", kind).toLowerCase()} : vous encaissez, consultez les élèves et relancez les impayés. La grille de frais, les classes et l'annulation des reçus sont réservés à la direction.</div>}
       {!canEdit && !secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données de l'école.</div>}
       <div className="ec-tabs">
         {tabs.map(([id, l]) => (<button key={id} onClick={() => setTab(id)} data-testid={"ecole-tab-" + id} className="px-3 py-2 text-sm rounded-lg transition-colors" style={{ background: tab === id ? "#152238" : "transparent", color: tab === id ? "#EFE9DD" : "#6B6552", fontWeight: tab === id ? 600 : 500 }}>{l}</button>))}
