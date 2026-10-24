@@ -1,7 +1,8 @@
 // ═══ MODULE ═══
 // @module Ecoles
-// @depends fmt, isFutureDate, isLocked, todayStr, uid, useBrouillon, useState
-// @exports EcolesModule
+// @depends EcolesRapports, EcolesRelances, EcolesRemises, ecAppliquerRemisesAuxNouvelles, fmt
+//   isFutureDate, isLocked, todayStr, uid, useBrouillon, useState
+// @exports EcolesModule, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecId, ecInput, ecR2, ecReste, ecRows
 // ═══ FIN DE L'EN-TÊTE ═══
 // Bloc Écoles, première version : années scolaires, classes, familles et élèves, grille de frais, échéancier,
 // encaissements avec reçus numérotés, écritures comptables.
@@ -101,7 +102,10 @@ const ecBorder = { borderColor: "#DDD6C4" };
 const ecBtn = { background: "#152238", color: "#EFE9DD" };
 const ecBtnGold = { background: "#C9A24B", color: "#152238" };
 
-function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit }) {
+// Un frais s'applique-t-il à cet élève ? (classes visées ; les frais facultatifs — cantine, transport — seulement si l'élève y est abonné)
+const ecEligible = (f, s) => (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId)) && (!f.optional || (s.options || []).includes(f.id));
+
+function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const [tab, setTab] = useState("apercu");
   const years = ecRows(ecole, "year");
@@ -120,7 +124,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const yCharges = year ? charges.filter((c) => c.yearId === year.id && c.status !== "annulée") : [];
   const [printRec, setPrintRec] = useState(null);
 
-  const tabs = [["apercu", "Vue d'ensemble"], ["annees", "Années et classes"], ["eleves", "Familles et élèves"], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"]];
+  const tabs = [["apercu", "Vue d'ensemble"], ["annees", "Années et classes"], ["eleves", "Familles et élèves"], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"], ["relances", "Impayés et relances"], ["remises", "Bourses et rabais"], ["rapports", "Rapports"]];
 
   // ───────── Vue d'ensemble ─────────
   const attendu = ecR2(yCharges.reduce((s, c) => s + c.amount, 0));
@@ -236,7 +240,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (!fs.classId || !classes.some((c) => c.id === fs.classId)) { showToast("Choisissez la classe de l'élève."); return; }
     const st = { type: "student", id: ecId(), matricule: nextMatricule(), firstName, lastName, familyId: fs.familyId, yearId: year.id, classId: fs.classId, status: "actif" };
     // les frais de l'année prévus pour cette classe sont appliqués tout de suite
-    const mesFrais = fees.filter((f) => f.yearId === year.id && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(st.classId)));
+    const mesFrais = fees.filter((f) => f.yearId === year.id && ecEligible(f, st));
     const nouvelles = mesFrais.flatMap((f) => ecChargesPourEleve(f, st));
     setEcole((prev) => [...(prev || []), st, ...nouvelles]);
     setFs({ firstName: "", lastName: "", familyId: fs.familyId, classId: fs.classId });
@@ -247,6 +251,26 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (!canEdit || !classId || classId === s.classId) return;
     setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, classId } : r)));
     showToast("Classe modifiée. Les frais déjà appliqués ne changent pas ; utilisez « Appliquer les frais » (onglet Frais) pour ajouter ceux de la nouvelle classe.");
+  };
+  const basculerOption = (s, f) => {
+    if (!canEdit) return;
+    const abonne = (s.options || []).includes(f.id);
+    if (!abonne) {
+      const base = ecChargesPourEleve(f, s);
+      const existants = new Set(charges.map((c) => c.id));
+      const neuves = ecAppliquerRemisesAuxNouvelles(base.filter((c) => !existants.has(c.id)), ecRows(ecole, "discount"));
+      const ids = new Set(base.map((c) => c.id));
+      setEcole((prev) => [...(prev || []).map((r) => (r.id === s.id ? { ...r, options: [...(r.options || []), f.id] } : (r.type === "charge" && ids.has(r.id) && r.status === "annulée" ? { ...r, status: "ok" } : r))), ...neuves]);
+      showToast("« " + f.label + " » ajouté pour " + (s.firstName + " " + s.lastName).trim() + ".");
+      logAudit("Écoles", "Abonnement ajouté", f.label + " — " + (s.firstName + " " + s.lastName).trim());
+      return;
+    }
+    const siens = charges.filter((c) => c.studentId === s.id && c.feeId === f.id && c.status !== "annulée");
+    const figees = siens.filter((c) => c.recognized || (c.paid || 0) > 0);
+    const aAnnuler = new Set(siens.filter((c) => !c.recognized && !((c.paid || 0) > 0)).map((c) => c.id));
+    setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, options: (r.options || []).filter((x) => x !== f.id) } : (r.type === "charge" && aAnnuler.has(r.id) ? { ...r, status: "annulée" } : r))));
+    showToast(figees.length ? "« " + f.label + " » retiré. " + figees.length + " échéance(s) déjà constatée(s) ou payée(s) restent dues : elles ne sont pas annulées." : "« " + f.label + " » retiré : les échéances à venir sont annulées.");
+    logAudit("Écoles", "Abonnement retiré", f.label + " — " + (s.firstName + " " + s.lastName).trim());
   };
   const sortirEleve = (s) => { if (!canEdit) return; setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, status: s.status === "sorti" ? "actif" : "sorti" } : r))); };
   const Eleves = () => (
@@ -273,14 +297,14 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
           return (<tr key={s.id} style={{ borderTop: "1px solid #EEE9DA", opacity: s.status === "sorti" ? 0.55 : 1 }} data-testid="ecole-eleve-ligne">
             <td className="py-1.5 tabular text-xs">{s.matricule}</td><td>{(s.firstName + " " + s.lastName).trim()}{s.status === "sorti" ? " (sorti)" : ""}</td><td>{famName(s.familyId)}</td>
             <td>{canEdit ? <select value={s.classId} onChange={(e) => changeClass(s, e.target.value)} className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{classes.filter((c) => c.yearId === s.yearId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select> : className(s.classId)}</td>
-            <td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && <button onClick={() => sortirEleve(s)} className="text-xs underline">{s.status === "sorti" ? "Réintégrer" : "Marquer sorti"}</button>}</td></tr>);
+            <td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && fees.filter((f) => f.optional && f.yearId === s.yearId && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId))).map((f) => <label key={f.id} className="text-xs mr-3 whitespace-nowrap"><input type="checkbox" checked={(s.options || []).includes(f.id)} onChange={() => basculerOption(s, f)} data-testid="ecole-eleve-option" /> {f.label}</label>)}{canEdit && <button onClick={() => sortirEleve(s)} className="text-xs underline">{s.status === "sorti" ? "Réintégrer" : "Marquer sorti"}</button>}</td></tr>);
         })}</tbody></table>
       {year && students.filter((s) => s.yearId === year.id).length === 0 && <div className="text-sm mt-2" style={{ color: "#8A8370" }}>Aucun élève pour cette année.</div>}
     </div>
   );
 
   // ───────── Frais ─────────
-  const [fe, setFe] = useBrouillon("ecole-frais", { label: "", amount: "", nb: "1", firstDue: "", account: "7061", classIds: [], tca: false });
+  const [fe, setFe] = useBrouillon("ecole-frais", { label: "", amount: "", nb: "1", firstDue: "", account: "7061", classIds: [], tca: false, optional: false });
   const addFee = () => {
     if (!canEdit) return;
     if (!year) { showToast("Créez d'abord une année scolaire."); return; }
@@ -290,8 +314,8 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (!(nb >= 1 && nb <= 12)) { showToast("Le nombre d'échéances doit être entre 1 et 12."); return; }
     if (!fe.firstDue) { showToast("Indiquez la date de la première échéance."); return; }
     const taux = fe.tca ? Number(settings.taxRate) || 0 : 0;
-    setEcole((prev) => [...(prev || []), { type: "fee", id: ecId(), yearId: year.id, label: fe.label.trim(), amount: ecR2(amount), nb, firstDue: fe.firstDue, account: fe.account, classIds: (fe.classIds || []).slice(), tcaRate: taux }]);
-    setFe({ label: "", amount: "", nb: "1", firstDue: fe.firstDue, account: fe.account, classIds: [], tca: false });
+    setEcole((prev) => [...(prev || []), { type: "fee", id: ecId(), yearId: year.id, label: fe.label.trim(), amount: ecR2(amount), nb, firstDue: fe.firstDue, account: fe.account, classIds: (fe.classIds || []).slice(), tcaRate: taux, optional: !!fe.optional }]);
+    setFe({ label: "", amount: "", nb: "1", firstDue: fe.firstDue, account: fe.account, classIds: [], tca: false, optional: false });
     showToast("Frais ajouté. Utilisez « Appliquer les frais aux élèves » pour créer les échéances."); logAudit("Écoles", "Frais ajouté", fe.label.trim() + " — " + fmt(amount));
   };
   const delFee = (f) => {
@@ -304,10 +328,12 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     const existants = new Set(charges.map((c) => c.id));
     const nouvelles = [];
     fees.filter((f) => f.yearId === year.id).forEach((f) => {
-      students.filter((s) => s.yearId === year.id && s.status !== "sorti" && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId))).forEach((s) => {
+      students.filter((s) => s.yearId === year.id && s.status !== "sorti" && ecEligible(f, s)).forEach((s) => {
         ecChargesPourEleve(f, s).forEach((c) => { if (!existants.has(c.id)) nouvelles.push(c); });
       });
     });
+    const avecRemises = ecAppliquerRemisesAuxNouvelles(nouvelles, ecRows(ecole, "discount"));
+    nouvelles.splice(0, nouvelles.length, ...avecRemises);
     if (!nouvelles.length) { showToast("Rien à ajouter : tous les frais sont déjà appliqués à tous les élèves concernés."); return; }
     setEcole((prev) => [...(prev || []), ...nouvelles]);
     showToast(nouvelles.length + " échéance(s) créée(s)."); logAudit("Écoles", "Frais appliqués aux élèves", nouvelles.length + " échéance(s)");
@@ -327,11 +353,12 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
         <span className="text-xs" style={{ color: "#8A8370" }}>Classes concernées (aucune cochée = toutes) :</span>
         {classes.filter((c) => c.yearId === year.id).map((c) => <label key={c.id} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={(fe.classIds || []).includes(c.id)} onChange={() => setFe({ ...fe, classIds: (fe.classIds || []).includes(c.id) ? fe.classIds.filter((x) => x !== c.id) : [...(fe.classIds || []), c.id] })} />{c.name}</label>)}
         <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!!fe.tca} onChange={(e) => setFe({ ...fe, tca: e.target.checked })} data-testid="ecole-frais-tca" />Soumis à la TCA</label>
+        <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!!fe.optional} onChange={(e) => setFe({ ...fe, optional: e.target.checked })} data-testid="ecole-frais-facultatif" />Facultatif (cantine, transport : par abonnement)</label>
         <button onClick={addFee} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-frais-ajouter">Ajouter ce frais</button>
       </div>)}
       <table className="w-full text-sm mb-4"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Frais</th><th className="text-right">Montant</th><th className="text-right">Échéances</th><th>1re échéance</th><th>Classes</th><th></th></tr></thead>
         <tbody>{year && fees.filter((f) => f.yearId === year.id).map((f) => (
-          <tr key={f.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-frais-ligne"><td className="py-1.5">{f.label}{f.tcaRate > 0 ? " (TCA " + f.tcaRate + " %)" : ""}</td><td className="text-right tabular">{fmt(f.amount)}</td><td className="text-right">{f.nb}</td><td>{ecDateFr(f.firstDue)}</td>
+          <tr key={f.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-frais-ligne"><td className="py-1.5">{f.label}{f.tcaRate > 0 ? " (TCA " + f.tcaRate + " %)" : ""}{f.optional ? " (facultatif)" : ""}</td><td className="text-right tabular">{fmt(f.amount)}</td><td className="text-right">{f.nb}</td><td>{ecDateFr(f.firstDue)}</td>
             <td className="text-xs">{(f.classIds || []).length ? f.classIds.map(className).join(", ") : "Toutes"}</td><td className="text-right">{canEdit && <button onClick={() => delFee(f)} className="text-xs" style={{ color: "#A6432F" }}>Supprimer</button>}</td></tr>))}</tbody></table>
       {canEdit && year && <button onClick={appliquer} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-appliquer">Appliquer les frais aux élèves</button>}
     </div>
@@ -412,7 +439,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (enAvance > 0) lines.push({ account: "487", debit: 0, credit: enAvance });
     const number = prochainNumero();
     const e = postEntry(fp.date, "Encaissement scolarité " + number + " — " + fam.name, lines, { kind: "ecole" });
-    const receipt = { type: "receipt", id: ecId(), number, familyId: fp.familyId, studentId: fp.studentId || "", date: fp.date, createdAt: new Date().toISOString(), amount: montant, mode: fp.mode, payer: fp.payer.trim(), allocations: alloc, entryId: e.id, status: "valide" };
+    const receipt = { type: "receipt", id: ecId(), number, familyId: fp.familyId, studentId: fp.studentId || "", date: fp.date, createdAt: new Date().toISOString(), amount: montant, mode: fp.mode, payer: fp.payer.trim(), allocations: alloc, entryId: e.id, status: "valide", by: currentUserEmail || "" };
     const parCharge = {}; alloc.forEach((a) => { parCharge[a.chargeId] = a; });
     setEcole((prev) => [...(prev || []).map((x) => {
       if (x.type !== "charge") return x;
@@ -517,6 +544,9 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
       {tab === "frais" && Frais()}
       {tab === "echeances" && Echeances()}
       {tab === "recus" && Recus()}
+      {tab === "relances" && <EcolesRelances ecole={ecole} setEcole={setEcole} year={year} families={families} students={students} charges={charges} canAct={canEdit} today={today} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} settings={settings} />}
+      {tab === "remises" && <EcolesRemises ecole={ecole} setEcole={setEcole} year={year} students={students} fees={fees} charges={charges} canEdit={canEdit} accounts={accounts} setAccounts={setAccounts} setEntries={setEntries} settings={settings} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />}
+      {tab === "rapports" && <EcolesRapports year={year} classes={classes} students={students} families={families} charges={charges} receipts={receipts} today={today} showToast={showToast} />}
       {printRec && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto p-3 md:p-8 no-print" style={{ background: "rgba(21,34,56,0.55)" }} onClick={() => setPrintRec(null)} data-testid="ecole-recu-apercu">
             <div className="w-full" style={{ maxWidth: 860 }} onClick={(e) => e.stopPropagation()}>

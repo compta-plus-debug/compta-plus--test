@@ -2826,7 +2826,7 @@ function App() {
           />
         )}
         {active === "ecole" && ecolesActif && role !== "Vendeur" && (
-          <EcolesModule ecole={ecole} setEcole={setEcole} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} />
+          <EcolesModule ecole={ecole} setEcole={setEcole} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "admin" && role === "Administrateur" && (
           <AdminModule
