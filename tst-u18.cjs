@@ -75,8 +75,8 @@ ok('message de relance par défaut : l\'université',/l'université/.test(await 
 ok('aucune erreur de page',errs.length===0,errs.slice(0,3));await p.close();
 // 5) rôles par type
 {const {p:q}=await boot(b,{settings:base,primary:true,cats:{ecole:[{type:'etab',id:'etab',kind:'univ'}]},pageInit:mk('Éditeur')});await q.waitForTimeout(1200);
- ok('université : « Rôle : Recteur » dans le menu',/Rôle : Recteur/.test(await q.locator('aside, nav').first().innerText()),(await q.locator('aside, nav').first().innerText()).slice(-300));await q.close();}
+ ok('université : « Rôle : Doyen » dans le menu',/Rôle : Doyen/.test(await q.locator('aside, nav').first().innerText()),(await q.locator('aside, nav').first().innerText()).slice(-300));await q.close();}
 {const {p:q}=await boot(b,{settings:base,primary:true,cats:{ecole:[{type:'etab',id:'etab',kind:'univ'}]},pageInit:mk('Administrateur')});await q.waitForTimeout(1200);
  await q.getByText('Administration',{exact:true}).first().click();await q.waitForTimeout(800);await q.getByRole('button',{name:'Accès',exact:true}).click();await q.waitForTimeout(300);await q.getByRole('button',{name:'Utilisateurs',exact:true}).click();await q.waitForTimeout(800);
- const h=await q.content();ok('université : Administration propose Recteur (Gestionnaire) et Vice-recteur (Consultant)',/>Recteur \(Gestionnaire\)</.test(h)&&/>Vice-recteur \(Consultant\)</.test(h));await q.close();}
+ const h=await q.content();ok('université : Administration propose Doyen (Gestionnaire) et Vice-doyen (Consultant)',/>Doyen \(Gestionnaire\)</.test(h)&&/>Vice-doyen \(Consultant\)</.test(h));await q.close();}
 await b.close();console.log('fails='+fails);process.exit(fails?1:0);})();
