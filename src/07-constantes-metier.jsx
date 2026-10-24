@@ -19,7 +19,7 @@ const MODULES = [
   { id: "rh", n: 9, label: "Salaires (RH)", icon: BadgeDollar, ready: true },
   { id: "gestion", n: 10, label: "Gestion avancée", icon: ClipboardIcon, ready: true },
   { id: "impex", n: 12, label: "Import-export", icon: Truck, ready: true }, // bloc par secteur : visible seulement si le secteur « Import-export » est actif et l'espace choisi
-  { id: "ecole", n: 11, label: "Écoles", icon: BookOpen, ready: true }, // bloc par secteur : visible seulement si le secteur « Écoles » est actif
+  { id: "ecole", n: 11, label: "Éducation", icon: BookOpen, ready: true }, // bloc par secteur : visible seulement si le secteur « Écoles » est actif
 ];
 
 // Modules accessibles par rôle. "null" = accès à tous les modules (comportement

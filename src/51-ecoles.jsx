@@ -40,17 +40,26 @@ const ecAddMonths = (iso, n) => {
 const ecDateFr = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || "")); return m ? m[3] + "/" + m[2] + "/" + m[1] : String(iso || ""); };
 const ecReste = (c) => ecR2((Number(c.amount) || 0) - (Number(c.paid) || 0));
 
+// Vocabulaire selon le type d'établissement (le bloc s'appelle « Éducation » : école, formation professionnelle, université)
+const EC_TYPES_ETAB = [["ecole", "École (primaire, secondaire)"], ["pro", "Centre de formation professionnelle"], ["univ", "Université ou institut supérieur"]];
+const EC_VOCAB = {
+  ecole: { annee: "année scolaire", Annees: "Années scolaires", Classe: "Classe", Classes: "Classes", classe: "classe", Eleve: "Élève", Eleves: "Élèves", eleve: "élève", Famille: "Famille", Familles: "Familles", famille: "famille", FamilleResp: "Famille ou responsable" },
+  pro: { annee: "année de formation", Annees: "Années de formation", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Apprenant", Eleves: "Apprenants", eleve: "apprenant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (apprenant, famille ou entreprise)" },
+  univ: { annee: "année académique", Annees: "Années académiques", Classe: "Filière", Classes: "Filières", classe: "filière", Eleve: "Étudiant", Eleves: "Étudiants", eleve: "étudiant", Famille: "Payeur", Familles: "Payeurs", famille: "payeur", FamilleResp: "Payeur (étudiant, famille ou employeur)" },
+};
+
 // Échéances d'un frais pour un élève (identifiants stables : le même frais n'est jamais appliqué deux fois au même élève).
 function ecChargesPourEleve(fee, student) {
   const n = Math.max(1, Math.round(Number(fee.nb) || 1));
-  const total = ecR2(fee.amount);
+  const total = fee.perCredit ? ecR2((Number(fee.amount) || 0) * (Number(student.credits) || 0)) : ecR2(fee.amount); // frais « par crédit » : montant × crédits de l'étudiant
+  if (!(total > 0)) return [];
   const part = ecR2(Math.floor((total / n) * 100) / 100);
   const out = [];
   for (let i = 0; i < n; i++) {
     const amount = i === n - 1 ? ecR2(total - part * (n - 1)) : part;
     out.push({
       type: "charge", id: student.id + ":" + fee.id + ":" + (i + 1), studentId: student.id, familyId: student.familyId, yearId: fee.yearId, feeId: fee.id,
-      label: n > 1 ? fee.label + " " + (i + 1) + "/" + n : fee.label, amount, dueDate: n > 1 ? ecAddMonths(fee.firstDue, i) : fee.firstDue,
+      label: (n > 1 ? fee.label + " " + (i + 1) + "/" + n : fee.label) + (fee.semesterLabel ? " — " + fee.semesterLabel : ""), amount, dueDate: n > 1 ? ecAddMonths(fee.firstDue, i) : fee.firstDue,
       account: fee.account || "7061", tcaRate: Number(fee.tcaRate) || 0, recognized: false, advance: 0, paid: 0, status: "ok",
     });
   }
@@ -144,6 +153,11 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const families = ecRows(ecole, "family");
   const students = ecRows(ecole, "student");
   const fees = ecRows(ecole, "fee");
+  const semesters = ecRows(ecole, "semester");
+  const etab = ecRows(ecole, "etab")[0];
+  const kind = etab && EC_VOCAB[etab.kind] ? etab.kind : "ecole";
+  const V = EC_VOCAB[kind];
+  const sup = kind !== "ecole"; // formation professionnelle ou université : semestres et crédits
   const charges = ecRows(ecole, "charge");
   const receipts = ecRows(ecole, "receipt");
   const [yearId, setYearId] = useState(() => (years.find((y) => y.active) || years[years.length - 1] || {}).id || "");
@@ -155,7 +169,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const yCharges = year ? charges.filter((c) => c.yearId === year.id && c.status !== "annulée") : [];
   const [printRec, setPrintRec] = useState(null);
 
-  const tabsTous = [["apercu", "Vue d'ensemble"], ["annees", "Années et classes"], ["eleves", "Familles et élèves"], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"], ["relances", "Impayés et relances"], ["remises", "Bourses et rabais"], ["rapports", "Rapports"]];
+  const tabsTous = [["apercu", "Vue d'ensemble"], ["annees", "Années et " + V.Classes.toLowerCase()], ["eleves", V.Familles + " et " + V.Eleves.toLowerCase()], ["frais", "Frais"], ["echeances", "Échéances"], ["recus", "Encaissements"], ["relances", "Impayés et relances"], ["remises", "Bourses et rabais"], ["rapports", "Rapports"]];
   const tabs = secretaire ? tabsTous.filter(([id]) => ["eleves", "recus", "relances"].includes(id)) : tabsTous;
 
   // ───────── Vue d'ensemble ─────────
@@ -172,9 +186,9 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     const lignes = Object.keys(parFamille).map((id) => ({ id, ...parFamille[id] })).sort((a, b) => b.total - a.total);
     return (
       <div>
-        {!year && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="ecole-vide">Pour commencer : créez une <b>année scolaire</b> et ses <b>classes</b> (onglet « Années et classes »), puis les <b>familles et élèves</b>, puis la <b>grille de frais</b>.</div>}
+        {!year && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="ecole-vide">Pour commencer : créez une <b>{V.annee}</b> et ses <b>{V.Classes.toLowerCase()}</b> (onglet « Années et {V.Classes.toLowerCase()} »), puis les <b>{V.Familles.toLowerCase()} et {V.Eleves.toLowerCase()}</b>, puis la <b>grille de frais</b>.</div>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          {[["Élèves inscrits", String(students.filter((s) => year && s.yearId === year.id && s.status !== "sorti").length), "ecole-kpi-eleves"], ["Frais attendus", fmt(attendu), "ecole-kpi-attendu"], ["Encaissé", fmt(encaisse), "ecole-kpi-encaisse"], ["Impayés échus", fmt(impayes), "ecole-kpi-impayes"]].map(([l, v, t]) => (
+          {[[V.Eleves + " inscrits", String(students.filter((s) => year && s.yearId === year.id && s.status !== "sorti").length), "ecole-kpi-eleves"], ["Frais attendus", fmt(attendu), "ecole-kpi-attendu"], ["Encaissé", fmt(encaisse), "ecole-kpi-encaisse"], ["Impayés échus", fmt(impayes), "ecole-kpi-impayes"]].map(([l, v, t]) => (
             <div key={t} className="ec-kpi"><div className="text-xs" style={{ color: "#8A8370" }}>{l}</div><div className="display text-lg tabular" data-testid={t} style={{ color: "#152238" }}>{v}</div></div>
           ))}
         </div>
@@ -217,10 +231,37 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (students.some((s) => s.classId === c.id)) { showToast("Cette classe contient des élèves : déplacez-les d'abord."); return; }
     setEcole((prev) => (prev || []).filter((r) => r.id !== c.id));
   };
+  const [fsem, setFsem] = useBrouillon("ecole-semestre", { label: "", start: "", end: "" });
+  const choisirEtab = (k) => {
+    if (!canEdit || !EC_VOCAB[k]) return;
+    setEcole((prev) => [...(prev || []).filter((r) => r.type !== "etab"), { type: "etab", id: "etab", kind: k }]);
+    showToast("Type d'établissement enregistré : le vocabulaire (" + EC_VOCAB[k].Classes.toLowerCase() + ", " + EC_VOCAB[k].Eleves.toLowerCase() + ") est adapté.");
+  };
+  const addSemester = () => {
+    if (!canEdit) return;
+    if (!year) { showToast("Créez d'abord une " + V.annee + "."); return; }
+    const label = fsem.label.trim();
+    if (!label) { showToast("Indiquez le nom du semestre ou de la session (ex. Semestre 1)."); return; }
+    if (semesters.some((x) => x.yearId === year.id && x.label.toLowerCase() === label.toLowerCase())) { showToast("Ce semestre existe déjà pour cette année."); return; }
+    setEcole((prev) => [...(prev || []), { type: "semester", id: ecId(), yearId: year.id, label, start: fsem.start || "", end: fsem.end || "" }]);
+    setFsem({ label: "", start: "", end: "" });
+  };
+  const delSemester = (x) => {
+    if (!canEdit) return;
+    if (fees.some((f) => f.semesterId === x.id)) { showToast("Des frais sont rattachés à ce semestre : supprimez-les d'abord."); return; }
+    setEcole((prev) => (prev || []).filter((r) => r.id !== x.id));
+  };
   const Annees = () => (
     <div>
-      <div className="display text-base mb-2" style={{ color: "#152238" }}>Années scolaires</div>
-      <div className="space-y-1 mb-3">{years.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune année scolaire.</div>}
+      {canEdit && (<div className="ec-card p-4 mb-5" data-testid="ecole-etab">
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Type d'établissement</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <select value={kind} onChange={(e) => choisirEtab(e.target.value)} data-testid="ecole-etab-type" className={ecInput} style={{ ...ecBorder, maxWidth: 360 }}>{EC_TYPES_ETAB.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          <span className="text-xs" style={{ color: "#7A7460" }}>Adapte les mots (classes ou filières, élèves, étudiants ou apprenants) ; pour une formation professionnelle ou une université, ajoute les semestres et les frais par crédit.</span>
+        </div>
+      </div>)}
+      <div className="display text-base mb-2" style={{ color: "#152238" }}>{V.Annees}</div>
+      <div className="space-y-1 mb-3">{years.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune {V.annee}.</div>}
         {years.map((y) => (
           <div key={y.id} className="flex items-center gap-2 text-sm p-2 rounded" style={{ background: y.id === (year && year.id) ? "#E6F1EE" : "#fff", border: "1px solid #EEE9DA" }} data-testid="ecole-annee-ligne">
             <span className="flex-1"><b>{y.label}</b>{y.start ? " — du " + ecDateFr(y.start) : ""}{y.end ? " au " + ecDateFr(y.end) : ""}{y.active ? " (année active)" : ""}</span>
@@ -229,25 +270,37 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
           </div>))}
       </div>
       {canEdit && (<div className="grid md:grid-cols-4 gap-2 mb-6 items-end">
-        <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom de l'année</label><input value={fy.label} onChange={(e) => setFy({ ...fy, label: e.target.value })} placeholder="2026-2027" data-testid="ecole-annee-nom" className={ecInput} style={ecBorder} /></div>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom de la période (année)</label><input value={fy.label} onChange={(e) => setFy({ ...fy, label: e.target.value })} placeholder="2026-2027" data-testid="ecole-annee-nom" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={fy.start} onChange={(e) => setFy({ ...fy, start: e.target.value })} className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin</label><input type="date" value={fy.end} onChange={(e) => setFy({ ...fy, end: e.target.value })} className={ecInput} style={ecBorder} /></div>
         <button onClick={addYear} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-annee-ajouter">Créer l'année</button>
       </div>)}
-      <div className="display text-base mb-2" style={{ color: "#152238" }}>Classes{year ? " — " + year.label : ""}</div>
+      <div className="display text-base mb-2" style={{ color: "#152238" }}>{V.Classes}{year ? " — " + year.label : ""}</div>
       <div className="flex flex-wrap gap-2 mb-3">{year && classes.filter((c) => c.yearId === year.id).map((c) => (
         <span key={c.id} className="text-sm px-2.5 py-1 rounded" style={{ background: "#fff", border: "1px solid #DDD6C4" }} data-testid="ecole-classe-ligne">{c.name} <span className="text-xs" style={{ color: "#8A8370" }}>({students.filter((s) => s.classId === c.id && s.status !== "sorti").length})</span>
-          {canEdit && <button onClick={() => delClass(c)} className="ml-2 text-xs" style={{ color: "#A6432F" }} aria-label="Supprimer la classe">×</button>}</span>))}
-        {year && classes.filter((c) => c.yearId === year.id).length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune classe pour cette année.</div>}
+          {canEdit && <button onClick={() => delClass(c)} className="ml-2 text-xs" style={{ color: "#A6432F" }} aria-label={"Supprimer : " + V.classe}>×</button>}</span>))}
+        {year && classes.filter((c) => c.yearId === year.id).length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune {V.classe} pour cette année.</div>}
       </div>
-      {canEdit && year && (<div className="flex gap-2 items-end max-w-md"><div className="flex-1"><label className="text-xs" style={{ color: "#8A8370" }}>Nouvelle classe</label><input value={fc.name} onChange={(e) => setFc({ name: e.target.value })} placeholder="Ex. 6e année fondamentale A" data-testid="ecole-classe-nom" className={ecInput} style={ecBorder} /></div>
+      {canEdit && year && (<div className="flex gap-2 items-end max-w-md"><div className="flex-1"><label className="text-xs" style={{ color: "#8A8370" }}>Nouvelle {V.classe}</label><input value={fc.name} onChange={(e) => setFc({ name: e.target.value })} placeholder={sup ? "Ex. Comptabilité, Informatique de gestion" : "Ex. 6e année fondamentale A"} data-testid="ecole-classe-nom" className={ecInput} style={ecBorder} /></div>
         <button onClick={addClass} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-classe-ajouter">Ajouter</button></div>)}
+      {sup && (<div className="mt-6" data-testid="ecole-semestres">
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Semestres et sessions{year ? " — " + year.label : ""}</div>
+        <div className="flex flex-wrap gap-2 mb-3">{year && semesters.filter((x) => x.yearId === year.id).map((x) => (
+          <span key={x.id} className="text-sm px-2.5 py-1 rounded" style={{ background: "#fff", border: "1px solid #DDD6C4" }} data-testid="ecole-semestre-ligne">{x.label}{x.start ? " (dès le " + ecDateFr(x.start) + ")" : ""}
+            {canEdit && <button onClick={() => delSemester(x)} className="ml-2 text-xs" style={{ color: "#A6432F" }} aria-label="Supprimer le semestre">×</button>}</span>))}
+          {year && semesters.filter((x) => x.yearId === year.id).length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun semestre pour cette année (facultatif).</div>}</div>
+        {canEdit && year && (<div className="grid md:grid-cols-4 gap-2 items-end max-w-3xl">
+          <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nouveau semestre ou session</label><input value={fsem.label} onChange={(e) => setFsem({ ...fsem, label: e.target.value })} placeholder="Semestre 1" data-testid="ecole-semestre-nom" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={fsem.start} onChange={(e) => setFsem({ ...fsem, start: e.target.value })} data-testid="ecole-semestre-debut" className={ecInput} style={ecBorder} /></div>
+          <button onClick={addSemester} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-semestre-ajouter">Ajouter</button>
+        </div>)}
+      </div>)}
     </div>
   );
 
   // ───────── Familles et élèves ─────────
   const [ff, setFf] = useBrouillon("ecole-famille", { name: "", phone: "", email: "", address: "" });
-  const [fs, setFs] = useBrouillon("ecole-eleve", { firstName: "", lastName: "", familyId: "", classId: "" });
+  const [fs, setFs] = useBrouillon("ecole-eleve", { firstName: "", lastName: "", familyId: "", classId: "", credits: "" });
   const addFamily = () => {
     if (!canEdit) return;
     const name = ff.name.trim().replace(/\s+/g, " ");
@@ -270,14 +323,19 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (!lastName) { showToast("Indiquez le nom de l'élève."); return; }
     if (!fs.familyId || !families.some((f) => f.id === fs.familyId)) { showToast("Choisissez la famille de l'élève."); return; }
     if (!fs.classId || !classes.some((c) => c.id === fs.classId)) { showToast("Choisissez la classe de l'élève."); return; }
-    const st = { type: "student", id: ecId(), matricule: nextMatricule(), firstName, lastName, familyId: fs.familyId, yearId: year.id, classId: fs.classId, status: "actif" };
+    const st = { type: "student", id: ecId(), matricule: nextMatricule(), firstName, lastName, familyId: fs.familyId, yearId: year.id, classId: fs.classId, status: "actif", ...(sup && Number(fs.credits) > 0 ? { credits: Number(fs.credits) } : {}) };
     // les frais de l'année prévus pour cette classe sont appliqués tout de suite
     const mesFrais = fees.filter((f) => f.yearId === year.id && ecEligible(f, st));
     const nouvelles = mesFrais.flatMap((f) => ecChargesPourEleve(f, st));
     setEcole((prev) => [...(prev || []), st, ...nouvelles]);
-    setFs({ firstName: "", lastName: "", familyId: fs.familyId, classId: fs.classId });
+    setFs({ firstName: "", lastName: "", familyId: fs.familyId, classId: fs.classId, credits: "" });
     showToast("Élève inscrit" + (nouvelles.length ? " — " + nouvelles.length + " échéance(s) de frais créée(s)." : "."));
     logAudit("Écoles", "Élève inscrit", (firstName + " " + lastName).trim() + " — " + st.matricule);
+  };
+  const changeCredits = (s, v) => {
+    if (!canEdit) return;
+    const n = Math.max(0, Math.round(Number(v) || 0));
+    setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, credits: n } : r)));
   };
   const changeClass = (s, classId) => {
     if (!canEdit || !classId || classId === s.classId) return;
@@ -307,36 +365,38 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
   const sortirEleve = (s) => { if (!canEdit) return; setEcole((prev) => (prev || []).map((r) => (r.id === s.id ? { ...r, status: s.status === "sorti" ? "actif" : "sorti" } : r))); };
   const Eleves = () => (
     <div>
-      <div className="display text-base mb-2" style={{ color: "#152238" }}>Familles</div>
+      <div className="display text-base mb-2" style={{ color: "#152238" }}>{V.Familles}</div>
       {canEdit && (<div className="grid md:grid-cols-5 gap-2 mb-3 items-end">
-        <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Famille ou responsable</label><input value={ff.name} onChange={(e) => setFf({ ...ff, name: e.target.value })} data-testid="ecole-famille-nom" className={ecInput} style={ecBorder} /></div>
+        <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>{V.FamilleResp}</label><input value={ff.name} onChange={(e) => setFf({ ...ff, name: e.target.value })} data-testid="ecole-famille-nom" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Téléphone</label><input type="tel" value={ff.phone} onChange={(e) => setFf({ ...ff, phone: e.target.value })} data-testid="ecole-famille-tel" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>E-mail</label><input value={ff.email} onChange={(e) => setFf({ ...ff, email: e.target.value })} className={ecInput} style={ecBorder} /></div>
-        <button onClick={addFamily} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-famille-ajouter">Ajouter la famille</button>
+        <button onClick={addFamily} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-famille-ajouter">Ajouter : {V.famille}</button>
       </div>)}
-      <div className="text-xs mb-5" style={{ color: "#7A7460" }}>{families.length} famille(s) : {families.slice(0, 12).map((f) => f.name).join(", ")}{families.length > 12 ? "…" : ""}</div>
-      <div className="display text-base mb-2" style={{ color: "#152238" }}>Élèves{year ? " — " + year.label : ""}</div>
+      <div className="text-xs mb-5" style={{ color: "#7A7460" }}>{families.length} {V.famille}(s) : {families.slice(0, 12).map((f) => f.name).join(", ")}{families.length > 12 ? "…" : ""}</div>
+      <div className="display text-base mb-2" style={{ color: "#152238" }}>{V.Eleves}{year ? " — " + year.label : ""}</div>
       {canEdit && (<div className="grid md:grid-cols-5 gap-2 mb-3 items-end">
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Prénom</label><input value={fs.firstName} onChange={(e) => setFs({ ...fs, firstName: e.target.value })} data-testid="ecole-eleve-prenom" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom</label><input value={fs.lastName} onChange={(e) => setFs({ ...fs, lastName: e.target.value })} data-testid="ecole-eleve-nom" className={ecInput} style={ecBorder} /></div>
-        <div><label className="text-xs" style={{ color: "#8A8370" }}>Famille</label><select value={fs.familyId} onChange={(e) => setFs({ ...fs, familyId: e.target.value })} data-testid="ecole-eleve-famille" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
-        <div><label className="text-xs" style={{ color: "#8A8370" }}>Classe</label><select value={fs.classId} onChange={(e) => setFs({ ...fs, classId: e.target.value })} data-testid="ecole-eleve-classe" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{year && classes.filter((c) => c.yearId === year.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-        <button onClick={addStudent} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-eleve-ajouter">Inscrire l'élève</button>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>{V.Famille}</label><select value={fs.familyId} onChange={(e) => setFs({ ...fs, familyId: e.target.value })} data-testid="ecole-eleve-famille" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{families.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>{V.Classe}</label><select value={fs.classId} onChange={(e) => setFs({ ...fs, classId: e.target.value })} data-testid="ecole-eleve-classe" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{year && classes.filter((c) => c.yearId === year.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        {sup && <div><label className="text-xs" style={{ color: "#8A8370" }}>Crédits ce semestre (facultatif)</label><input type="number" min="0" value={fs.credits || ""} onChange={(e) => setFs({ ...fs, credits: e.target.value })} data-testid="ecole-eleve-credits" className={ecInput + " tabular"} style={ecBorder} /></div>}
+        <button onClick={addStudent} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-eleve-ajouter">Inscrire : {V.eleve}</button>
       </div>)}
-      <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matricule</th><th>Élève</th><th>Famille</th><th>Classe</th><th className="text-right">Reste à payer</th><th></th></tr></thead>
+      <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matricule</th><th>{V.Eleve}</th><th>{V.Famille}</th><th>{V.Classe}</th>{sup && <th className="text-right">Crédits</th>}<th className="text-right">Reste à payer</th><th></th></tr></thead>
         <tbody>{students.filter((s) => year && s.yearId === year.id).map((s) => {
           const reste = ecR2(charges.filter((c) => c.studentId === s.id && c.status !== "annulée").reduce((t, c) => t + ecReste(c), 0));
           return (<tr key={s.id} style={{ borderTop: "1px solid #EEE9DA", opacity: s.status === "sorti" ? 0.55 : 1 }} data-testid="ecole-eleve-ligne">
             <td className="py-1.5 tabular text-xs">{s.matricule}</td><td>{(s.firstName + " " + s.lastName).trim()}{s.status === "sorti" ? " (sorti)" : ""}</td><td>{famName(s.familyId)}</td>
             <td>{canEdit ? <select value={s.classId} onChange={(e) => changeClass(s, e.target.value)} className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{classes.filter((c) => c.yearId === s.yearId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select> : className(s.classId)}</td>
+            {sup && <td className="text-right">{canEdit ? <input type="number" min="0" value={s.credits || ""} onChange={(e) => changeCredits(s, e.target.value)} data-testid="ecole-eleve-credits-ligne" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 64 }} /> : (s.credits || "—")}</td>}
             <td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && fees.filter((f) => f.optional && f.yearId === s.yearId && (!f.classIds || f.classIds.length === 0 || f.classIds.includes(s.classId))).map((f) => <label key={f.id} className="text-xs mr-3 whitespace-nowrap"><input type="checkbox" checked={(s.options || []).includes(f.id)} onChange={() => basculerOption(s, f)} data-testid="ecole-eleve-option" /> {f.label}</label>)}{canEdit && <button onClick={() => sortirEleve(s)} className="text-xs underline">{s.status === "sorti" ? "Réintégrer" : "Marquer sorti"}</button>}</td></tr>);
         })}</tbody></table></div>
-      {year && students.filter((s) => s.yearId === year.id).length === 0 && <div className="text-sm mt-2" style={{ color: "#8A8370" }}>Aucun élève pour cette année.</div>}
+      {year && students.filter((s) => s.yearId === year.id).length === 0 && <div className="text-sm mt-2" style={{ color: "#8A8370" }}>Aucun {V.eleve} pour cette année.</div>}
     </div>
   );
 
   // ───────── Frais ─────────
-  const [fe, setFe] = useBrouillon("ecole-frais", { label: "", amount: "", nb: "1", firstDue: "", account: "7061", classIds: [], tca: false, optional: false });
+  const [fe, setFe] = useBrouillon("ecole-frais", { label: "", amount: "", nb: "1", firstDue: "", account: "7061", classIds: [], tca: false, optional: false, perCredit: false, semesterId: "" });
   const addFee = () => {
     if (!canEdit) return;
     if (!year) { showToast("Créez d'abord une année scolaire."); return; }
@@ -346,8 +406,8 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     if (!(nb >= 1 && nb <= 12)) { showToast("Le nombre d'échéances doit être entre 1 et 12."); return; }
     if (!fe.firstDue) { showToast("Indiquez la date de la première échéance."); return; }
     const taux = fe.tca ? Number(settings.taxRate) || 0 : 0;
-    setEcole((prev) => [...(prev || []), { type: "fee", id: ecId(), yearId: year.id, label: fe.label.trim(), amount: ecR2(amount), nb, firstDue: fe.firstDue, account: fe.account, classIds: (fe.classIds || []).slice(), tcaRate: taux, optional: !!fe.optional }]);
-    setFe({ label: "", amount: "", nb: "1", firstDue: fe.firstDue, account: fe.account, classIds: [], tca: false, optional: false });
+    setEcole((prev) => [...(prev || []), { type: "fee", id: ecId(), yearId: year.id, label: fe.label.trim(), amount: ecR2(amount), nb, firstDue: fe.firstDue, account: fe.account, classIds: (fe.classIds || []).slice(), tcaRate: taux, optional: !!fe.optional, ...(sup && fe.perCredit ? { perCredit: true } : {}), ...(sup && fe.semesterId ? { semesterId: fe.semesterId, semesterLabel: (semesters.find((x) => x.id === fe.semesterId) || {}).label || "" } : {}) }]);
+    setFe({ label: "", amount: "", nb: "1", firstDue: fe.firstDue, account: fe.account, classIds: [], tca: false, optional: false, perCredit: false, semesterId: fe.semesterId });
     showToast("Frais ajouté. Utilisez « Appliquer les frais aux élèves » pour créer les échéances."); logAudit("Écoles", "Frais ajouté", fe.label.trim() + " — " + fmt(amount));
   };
   const delFee = (f) => {
@@ -376,23 +436,25 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
       <div className="display text-base mb-2" style={{ color: "#152238" }}>Grille de frais{year ? " — " + year.label : ""}</div>
       {canEdit && year && (<div className="grid md:grid-cols-6 gap-2 mb-2 items-end">
         <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom du frais</label><input value={fe.label} onChange={(e) => setFe({ ...fe, label: e.target.value })} placeholder="Écolage" data-testid="ecole-frais-nom" className={ecInput} style={ecBorder} /></div>
-        <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant total par élève</label><input type="number" min="0" value={fe.amount} onChange={(e) => setFe({ ...fe, amount: e.target.value })} data-testid="ecole-frais-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
+        <div><label className="text-xs" style={{ color: "#8A8370" }}>{sup && fe.perCredit ? "Montant par crédit" : "Montant total par " + V.eleve}</label><input type="number" min="0" value={fe.amount} onChange={(e) => setFe({ ...fe, amount: e.target.value })} data-testid="ecole-frais-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Nombre d'échéances</label><input type="number" min="1" max="12" value={fe.nb} onChange={(e) => setFe({ ...fe, nb: e.target.value })} data-testid="ecole-frais-nb" className={ecInput + " tabular"} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>1re échéance</label><input type="date" value={fe.firstDue} onChange={(e) => setFe({ ...fe, firstDue: e.target.value })} data-testid="ecole-frais-date" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Type</label><select value={fe.account} onChange={(e) => setFe({ ...fe, account: e.target.value })} data-testid="ecole-frais-type" className={ecInput} style={ecBorder}>{EC_PRODUITS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
       </div>)}
       {canEdit && year && (<div className="flex flex-wrap items-center gap-4 mb-4 text-sm">
-        <span className="text-xs" style={{ color: "#8A8370" }}>Classes concernées (aucune cochée = toutes) :</span>
+        <span className="text-xs" style={{ color: "#8A8370" }}>{V.Classes} concernées (aucune cochée = toutes) :</span>
         {classes.filter((c) => c.yearId === year.id).map((c) => <label key={c.id} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={(fe.classIds || []).includes(c.id)} onChange={() => setFe({ ...fe, classIds: (fe.classIds || []).includes(c.id) ? fe.classIds.filter((x) => x !== c.id) : [...(fe.classIds || []), c.id] })} />{c.name}</label>)}
+        {sup && <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!!fe.perCredit} onChange={(e) => setFe({ ...fe, perCredit: e.target.checked })} data-testid="ecole-frais-par-credit" />Montant par crédit (× crédits de l'étudiant)</label>}
+        {sup && semesters.filter((x) => year && x.yearId === year.id).length > 0 && <select value={fe.semesterId} onChange={(e) => { const sm = semesters.find((x) => x.id === e.target.value); setFe({ ...fe, semesterId: e.target.value, firstDue: sm && sm.start && !fe.firstDue ? sm.start : fe.firstDue }); }} data-testid="ecole-frais-semestre" className="border rounded px-2 py-1 text-xs" style={ecBorder}><option value="">Période : toute l'année</option>{semesters.filter((x) => year && x.yearId === year.id).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>}
         <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!!fe.tca} onChange={(e) => setFe({ ...fe, tca: e.target.checked })} data-testid="ecole-frais-tca" />Soumis à la TCA</label>
         <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!!fe.optional} onChange={(e) => setFe({ ...fe, optional: e.target.checked })} data-testid="ecole-frais-facultatif" />Facultatif (cantine, transport : par abonnement)</label>
         <button onClick={addFee} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ecole-frais-ajouter">Ajouter ce frais</button>
       </div>)}
-      <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Frais</th><th className="text-right">Montant</th><th className="text-right">Échéances</th><th>1re échéance</th><th>Classes</th><th></th></tr></thead>
+      <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Frais</th><th className="text-right">Montant</th><th className="text-right">Échéances</th><th>1re échéance</th><th>{V.Classes}</th><th></th></tr></thead>
         <tbody>{year && fees.filter((f) => f.yearId === year.id).map((f) => (
-          <tr key={f.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-frais-ligne"><td className="py-1.5">{f.label}{f.tcaRate > 0 ? " (TCA " + f.tcaRate + " %)" : ""}{f.optional ? " (facultatif)" : ""}</td><td className="text-right tabular">{fmt(f.amount)}</td><td className="text-right">{f.nb}</td><td>{ecDateFr(f.firstDue)}</td>
+          <tr key={f.id} style={{ borderTop: "1px solid #EEE9DA" }} data-testid="ecole-frais-ligne"><td className="py-1.5">{f.label}{f.tcaRate > 0 ? " (TCA " + f.tcaRate + " %)" : ""}{f.optional ? " (facultatif)" : ""}{f.semesterLabel ? " — " + f.semesterLabel : ""}</td><td className="text-right tabular">{fmt(f.amount)}{f.perCredit ? " / crédit" : ""}</td><td className="text-right">{f.nb}</td><td>{ecDateFr(f.firstDue)}</td>
             <td className="text-xs">{(f.classIds || []).length ? f.classIds.map(className).join(", ") : "Toutes"}</td><td className="text-right">{canEdit && <button onClick={() => delFee(f)} className="text-xs" style={{ color: "#A6432F" }}>Supprimer</button>}</td></tr>))}</tbody></table></div>
-      {canEdit && year && <button onClick={appliquer} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-appliquer">Appliquer les frais aux élèves</button>}
+      {canEdit && year && <button onClick={appliquer} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ecole-appliquer">Appliquer les frais : {V.Eleves.toLowerCase()}</button>}
     </div>
   );
 
@@ -564,7 +626,7 @@ function EcolesModule({ ecole, setEcole, entries, setEntries, accounts, setAccou
     <div className={"p-4 md:p-8 max-w-6xl" + (printRec ? " no-print" : "")} data-testid="ecoles-module">
       <style>{EC_CSS}</style>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div><div className="display text-2xl" style={{ color: "#152238" }}>Écoles</div><div className="text-xs" style={{ color: "#8A8370" }}>Années scolaires, élèves, frais, échéances et reçus{year ? " — année : " + year.label : ""}</div></div>
+        <div><div className="display text-2xl" style={{ color: "#152238" }}>Éducation</div><div className="text-xs" style={{ color: "#8A8370" }}>{V.Annees}, {V.Eleves.toLowerCase()}, frais, échéances et reçus{year ? " — année : " + year.label : ""}</div></div>
         {years.length > 1 && (<select value={year ? year.id : ""} onChange={(e) => setYearId(e.target.value)} className="border rounded px-2 py-1.5 text-sm" style={ecBorder} data-testid="ecole-annee-choix">{years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select>)}
       </div>
       {secretaire && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#E6F1EE", color: "#0F4F44" }} data-testid="ecole-secretaire">Espace secrétaire-caissier(ère) : vous encaissez, consultez les élèves et relancez les impayés. La grille de frais, les classes et l'annulation des reçus sont réservés à la direction.</div>}
