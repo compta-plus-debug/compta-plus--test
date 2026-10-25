@@ -60,4 +60,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 53-import-export | 702 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 54-sante | 729 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 55-statistiques | 46 | 06-icones-et-graphiques | 51-ecoles, 53-import-export, 54-sante |
-| 56-facturation-abonnements | 402 | 08-composants-et-utilitaires, 50-secteurs-et-blocs, 09-assistance-et-anomalies, 01-garde-environnement-et-supabase, 00-config | 43-super-admin |
+| 56-facturation-abonnements | 410 | 08-composants-et-utilitaires, 50-secteurs-et-blocs, 09-assistance-et-anomalies, 01-garde-environnement-et-supabase, 00-config | 43-super-admin |
