@@ -268,6 +268,8 @@ function AdminModule({
         showToast("Le nom n'a pas pu être enregistré pour le moment. Les autres informations ont bien été sauvegardées. Si le problème persiste, contactez le support.");
         logClientError("saveCompany_name_update_zero_rows_affected", "companyId=" + companyId + " finalName=" + finalName, window.location.href);
       }
+      // Le téléphone de l'entreprise est aussi gardé côté serveur : il sert aux rappels de facture (WhatsApp). Sans effet si la colonne n'existe pas encore.
+      if (String(companyPhone || "").trim()) { try { await supabase.from("companies").update({ phone: String(companyPhone).trim() }).eq("id", companyId); } catch (e2) { /* sans effet */ } }
     } catch (e) {
       showToast("Le nom n'a peut-être pas pu être enregistré côté serveur — les autres informations ont quand même été sauvegardées localement.");
       logClientError("saveCompany_exception: " + String(e), String(e && e.stack || ""), window.location.href);
@@ -1122,7 +1124,7 @@ function AdminModule({
         <SalesStationsPanel salesStations={salesStations} setSalesStations={setSalesStations} showToast={showToast} logAudit={logAudit} isPrimaryAdmin={isPrimaryAdmin} />
       )}
 
-      {tab === "abonnement" && <BillingClientPanel companyId={_membership && _membership.companyId} />}
+      {tab === "abonnement" && <BillingClientPanel companyId={_membership && _membership.companyId} showToast={showToast} />}
       {tab === "espace" && (
         <div className="max-w-xl" data-testid="espace-panel">
           <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1", overflowWrap: "anywhere" }}>

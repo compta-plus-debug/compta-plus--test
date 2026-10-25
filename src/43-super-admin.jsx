@@ -400,7 +400,7 @@ function SuperAdminModule({ showToast }) {
         {(() => {
           const SA_GROUPS = [
             { id: "activite", label: "Activité et finances", tabs: [["dashboard", "Tableau de bord"], ["entreprises", "Entreprises"], ["rapports", "Rapports et analyse"]] },
-            { id: "facturation", label: "Facturation", tabs: [["fact_factures", "Factures"], ["fact_reglages", "Réglages de facturation"]] },
+            { id: "facturation", label: "Facturation", tabs: [["fact_factures", "Factures"], ["fact_relances", "Relances"], ["fact_reglages", "Réglages de facturation"]] },
             { id: "essais", label: "Essais et inscriptions", tabs: [["suivi", "Suivi des essais"], ["inscriptions", "Inscriptions et essais"]] },
             { id: "controle", label: "Contrôle et sécurité", tabs: [["journal", "Journal"], ["erreurs", "Erreurs"], ["perf", "Performances"], ["integrite", "Intégrité des données"]] },
           ];
@@ -1015,6 +1015,7 @@ function SuperAdminModule({ showToast }) {
         })()}
 
         {tab === "fact_factures" && <BillingAdminPanel view="factures" showToast={showToast} currentUserEmail={(typeof _membership !== "undefined" && _membership && _membership.email) || ""} />}
+        {tab === "fact_relances" && <BillingAdminPanel view="relances" showToast={showToast} currentUserEmail={(typeof _membership !== "undefined" && _membership && _membership.email) || ""} />}
         {tab === "fact_reglages" && <BillingAdminPanel view="reglages" showToast={showToast} currentUserEmail={(typeof _membership !== "undefined" && _membership && _membership.email) || ""} />}
         {tab === "journal" && (() => {
           const LAB = { statut_modifie: "Statut modifié", forfait_modifie: "Forfait modifié", paiement_enregistre: "Paiement enregistré", groupe_cree: "Groupe créé", entreprise_supprimee: "Entreprise supprimée", essai_prolonge: "Essai prolongé", essai_oublie: "Essai oublié", relance: "Relance préparée" };
