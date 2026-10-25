@@ -20,6 +20,7 @@ const init=()=>{const S=window.__srv;const pad=n=>String(n).padStart(2,'0');
 const mk=(f)=>new Function('const init='+init.toString()+';('+f.toString()+')()');
 const goSA=async p=>{await p.getByText('Super Admin',{exact:false}).first().click();await p.waitForTimeout(900);await g(p,'sa-group-facturation').click();};
 const inv=(p)=>p.evaluate(()=>window.__srv.tables.billing_invoices);
+const msgVu=async(p,txt)=>{try{await p.getByText(txt,{exact:false}).first().waitFor({timeout:6000});return true;}catch(e){return false;}};
 const ligne=(p,nom)=>g(p,'fb-rel-ligne').filter({hasText:nom});
 (async()=>{const b=await chromium.launch(process.env.CHROMIUM?{executablePath:process.env.CHROMIUM}:{});
 {const {p}=await boot(b,{settings:{companyName:'X'},primary:true,pageInit:mk(init)});
@@ -38,15 +39,17 @@ const ligne=(p,nom)=>g(p,'fb-rel-ligne').filter({hasText:nom});
  ok('e-mail : relance notée (1, e-mail)',r1.reminder_count===1&&r1.last_reminder_channel==='email'&&!!r1.last_reminder_at,r1);
  // e-mail impossible sans adresse
  const nb0=await p.evaluate(()=>window.__srv.calls.filter(c=>c==='fn send-offer-email').length);
- await ligne(p,'Boutique').locator('[data-testid="fb-rel-email"]').click();await p.waitForTimeout(500);
- ok('e-mail sans adresse : refusé, rien envoyé',(await p.evaluate(()=>window.__srv.calls.filter(c=>c==='fn send-offer-email').length))===nb0&&await p.getByText('Aucune adresse e-mail',{exact:false}).count()>=1);
+ await ligne(p,'Boutique').locator('[data-testid="fb-rel-email"]').click();
+ const vu1=await msgVu(p,'Aucune adresse e-mail');
+ ok('e-mail sans adresse : refusé, rien envoyé',(await p.evaluate(()=>window.__srv.calls.filter(c=>c==='fn send-offer-email').length))===nb0&&vu1);
  // WhatsApp
  await ligne(p,'Lakay').locator('[data-testid="fb-rel-wa"]').click();await p.waitForTimeout(700);
  const wa=await p.evaluate(()=>window.__wa);
  ok('WhatsApp : lien wa.me avec le bon numéro et le message',wa.length===1&&wa[0].startsWith('https://wa.me/50937123456?text=')&&/FA-2026-000001/.test(decodeURIComponent(wa[0])),wa);
  rows=await inv(p);ok('WhatsApp : relance notée (2, whatsapp)',rows.find(r=>r.id==='i1').reminder_count===2&&rows.find(r=>r.id==='i1').last_reminder_channel==='whatsapp');
- await ligne(p,'Boutique').locator('[data-testid="fb-rel-wa"]').click();await p.waitForTimeout(500);
- ok('WhatsApp sans numéro : refusé, rien ouvert',(await p.evaluate(()=>window.__wa.length))===1&&await p.getByText('Aucun numéro WhatsApp valide',{exact:false}).count()>=1);
+ await ligne(p,'Boutique').locator('[data-testid="fb-rel-wa"]').click();
+ const vu2=await msgVu(p,'Aucun numéro WhatsApp valide');
+ ok('WhatsApp sans numéro : refusé, rien ouvert',(await p.evaluate(()=>window.__wa.length))===1&&vu2);
  // envoi de masse : Lakay relancée il y a moins de 3 jours -> ignorée
  const nb1=await p.evaluate(()=>window.__srv.calls.filter(c=>c==='fn send-offer-email').length);
  await g(p,'fb-rel-masse').click();await p.waitForTimeout(900);
