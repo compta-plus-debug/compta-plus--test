@@ -37,10 +37,10 @@ const ROLE_LABELS_ECOLE = {
   ecole: { "Vendeur": "Secrétaire-caissier(ère)", "Éditeur": "Directeur", "Lecture seule": "Suppléant" },
   pro: { "Vendeur": "Secrétaire-caissier(ère)", "Éditeur": "Directeur", "Lecture seule": "Directeur adjoint" },
   univ: { "Vendeur": "Secrétaire général(e)", "Éditeur": "Doyen", "Lecture seule": "Vice-doyen" },
-  s_cabinet: { "Éditeur": "Médecin-directeur" },
-  s_pharmacie: { "Éditeur": "Pharmacien titulaire" },
-  s_labo: { "Éditeur": "Directeur du laboratoire" },
-  s_hopital: { "Éditeur": "Directeur médical" },
+  s_cabinet: { "Vendeur": "Réceptionniste", "Éditeur": "Médecin-directeur" },
+  s_pharmacie: { "Vendeur": "Vendeur(se) de comptoir", "Éditeur": "Pharmacien titulaire" },
+  s_labo: { "Vendeur": "Réceptionniste", "Éditeur": "Directeur du laboratoire" },
+  s_hopital: { "Vendeur": "Réceptionniste", "Éditeur": "Directeur médical" },
 };
 // 2e argument : false = noms habituels ; true ou « ecole » = école ; « pro » ou « univ » = type d'établissement.
 const roleLabel = (r, ecole) => (ecole && (ROLE_LABELS_ECOLE[ecole === true ? "ecole" : ecole] || ROLE_LABELS_ECOLE.ecole)[r]) || ROLE_LABELS[r] || r;
@@ -68,7 +68,7 @@ function allowedModulesFor(role, settings) {
 // d'écrire ces catégories pour un Vendeur, échouerait à chaque fois (normal), et
 // afficherait indéfiniment la bannière d'erreur de synchronisation pour une
 // restriction de sécurité parfaitement normale.
-const VENDEUR_WRITABLE_CATEGORIES = ["products", "invoices", "movements", "entries", "ecole"]; // « ecole » : secrétaire-caissier(ère) du bloc Écoles (nécessite le script SQL de la v261)
+const VENDEUR_WRITABLE_CATEGORIES = ["products", "invoices", "movements", "entries", "ecole", "sante"]; // « ecole » : secrétaire-caissier(ère) du bloc Écoles et « sante » : réception ou comptoir du bloc Santé (nécessitent les scripts SQL des v261 et v270)
 
 const DEFAULT_ACCOUNTS = [
   { code: "101", name: "Capital", type: "Capitaux propres" },

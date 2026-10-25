@@ -438,7 +438,7 @@ function App() {
   const santeKind = ((sante || []).find((r) => r && r.type === "etab") || {}).kind || "cabinet"; // type d'établissement de santé (noms des rôles)
   const modulesDuRole = allowedModulesFor(role, settings); // null = accès à tous les modules
   // Secrétaire-caissier(ère) : le rôle Vendeur d'une école accède aussi au module Écoles (encaissements seulement, voir le module)
-  const allowedModuleIds = modulesDuRole && role === "Vendeur" && ecolesActif ? [...modulesDuRole, "ecole"] : modulesDuRole;
+  const allowedModuleIds = modulesDuRole && role === "Vendeur" && (ecolesActif || santeActif) ? [...modulesDuRole, ...(ecolesActif ? ["ecole"] : []), ...(santeActif ? ["sante"] : [])] : modulesDuRole;
   // Espace de travail (entreprise qui a le secteur Écoles) : « École » met l'école en premier et replie les outils de commerce ;
   // « Commerce » donne l'espace habituel. Le choix est mémorisé sur cet appareil.
   const [espaceChoisi, setEspaceChoisi] = useState(() => { try { return localStorage.getItem("compta-plus-espace") || ""; } catch (e) { return ""; } });

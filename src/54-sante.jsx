@@ -39,6 +39,9 @@ const SA_COMPTES = {
   "512": { name: "Banque", type: "Actif" },
   "530": { name: "Caisse", type: "Actif" },
 };
+const saNom = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean).sort().join(" ");
+const saTel = (x) => String(x || "").replace(/\D/g, "").replace(/^509(\d{8})$/, "$1");
+const saPol = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const saR2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const saId = () => String(uid());
 const saRows = (rows, type) => (rows || []).filter((r) => r && r.type === type);
@@ -63,12 +66,15 @@ function saSoldes(inv) {
 
 function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEntries, accounts, setAccounts, products, setProducts, movements, setMovements, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
+  const isVendeur = role === "Vendeur"; // accueil (ou comptoir en pharmacie) : fiches patients, factures, encaissements, séjours
+  const canFront = canEdit || isVendeur;
   const today = todayStr();
   const [tab, setTab] = useState("apercu");
   // Chaque type d'établissement a ses propres données (marque « etab » ; les enregistrements sans marque appartiennent au cabinet).
   const etabRec = santeTout.find((r) => r && r.type === "etab");
   const kind = etabRec && SA_VOCAB[etabRec.kind] ? etabRec.kind : "cabinet";
   const V = SA_VOCAB[kind];
+  const peutProduits = canEdit || (isVendeur && kind === "pharmacie"); // la réception n'a pas les produits : c'est la pharmacie qui vend
   const sante = santeTout.filter((r) => r && (r.type === "etab" || (r.etab || "cabinet") === kind));
   const setSante = (fn) => setSanteBrut((prev) => {
     const base = prev || [];
@@ -123,12 +129,42 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
 
   // ───────── Patients, assureurs, praticiens, catalogue ─────────
   const [fp, setFp] = useBrouillon("sante-patient", { name: "", phone: "", insurerId: "", policy: "" });
+  const [edP, setEdP] = useState(null);
+  // Contrôle des fiches patients (doublons et fraude). Renvoie { ok, alerte }.
+  const controlePatient = (d, selfId) => {
+    const nom = saNom(d.name), tel = saTel(d.phone), pol = saPol(d.policy);
+    const autres = patients.filter((p) => p.id !== selfId);
+    const memeNom = (p) => saNom(p.name) === nom;
+    const memeTel = (p) => tel.length >= 6 && saTel(p.phone) === tel;
+    const memePol = (p) => pol.length >= 3 && saPol(p.policy) === pol && (!d.insurerId || !p.insurerId || d.insurerId === p.insurerId);
+    const refus = (msg, detail) => { showToast(msg); logAudit("Santé", "Fiche patient bloquée", detail); return { ok: false }; };
+    const dup = autres.find((p) => memeNom(p) && (memeTel(p) || memePol(p)));
+    if (dup) return refus("Doublon : « " + dup.name + " » (" + dup.number + ") existe déjà avec le même " + (memeTel(dup) ? "téléphone" : "numéro de police") + ". Utilisez cette fiche.", d.name.trim() + " = " + dup.number + " (" + dup.name + ")");
+    const polAutre = autres.find((p) => !memeNom(p) && memePol(p));
+    if (polAutre) {
+      if (!canEdit) return refus("Ce numéro de police est déjà utilisé par une autre personne (" + polAutre.number + "). Demandez au responsable de vérifier avant d'enregistrer.", d.name.trim() + " : police déjà utilisée par " + polAutre.number);
+      if (typeof window !== "undefined" && window.confirm && !window.confirm("Ce numéro de police est déjà utilisé par « " + polAutre.name + " » (" + polAutre.number + "). Confirmer qu'il s'agit bien d'une police commune (famille) ?")) return { ok: false };
+      logAudit("Santé", "Police partagée confirmée", d.name.trim() + " avec " + polAutre.number);
+    }
+    const telAutre = autres.find((p) => !memeNom(p) && memeTel(p));
+    return { ok: true, alerte: telAutre ? " Attention : le même téléphone est déjà sur la fiche de « " + telAutre.name + " »." : "" };
+  };
   const addPatient = () => {
-    if (!canEdit) return;
+    if (!canFront) return;
     if (!fp.name.trim()) { showToast("Indiquez le nom du " + V.patient + "."); return; }
-    setSante((prev) => [...(prev || []), { type: "patient", id: saId(), number: numeroPatient(), name: fp.name.trim(), phone: fp.phone.trim(), insurerId: fp.insurerId || "", policy: fp.policy.trim(), createdAt: new Date().toISOString() }]);
+    const c = controlePatient(fp, null);
+    if (!c.ok) return;
+    setSante((prev) => [...(prev || []), { type: "patient", id: saId(), number: numeroPatient(), name: fp.name.trim(), phone: fp.phone.trim(), insurerId: fp.insurerId || "", policy: fp.policy.trim(), createdAt: new Date().toISOString(), createdBy: currentUserEmail || "" }]);
     setFp({ name: "", phone: "", insurerId: fp.insurerId, policy: "" });
-    showToast(V.Patient + " ajouté(e)."); logAudit("Santé", V.Patient + " ajouté(e)", fp.name.trim());
+    showToast(V.Patient + " ajouté(e)." + c.alerte); logAudit("Santé", V.Patient + " ajouté(e)", fp.name.trim());
+  };
+  const modifierPatient = () => {
+    if (!canFront || !edP) return;
+    if (!edP.name.trim()) { showToast("Indiquez le nom du " + V.patient + "."); return; }
+    const c = controlePatient(edP, edP.id);
+    if (!c.ok) return;
+    maj(edP.id, (r) => ({ ...r, name: edP.name.trim(), phone: edP.phone.trim(), insurerId: edP.insurerId || "", policy: edP.policy.trim() }));
+    logAudit("Santé", "Fiche patient modifiée", edP.name.trim()); setEdP(null); showToast("Fiche modifiée." + c.alerte);
   };
   const delPatient = (p) => {
     if (!canEdit) return;
@@ -204,10 +240,11 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
     setNf({ ...nf, actId: "", qty: "1" });
   };
   const emettre = (draft) => {
-    if (!canEdit) return;
+    if (!canFront) return;
     const d = draft || { patientId: nf.patientId, practitionerId: nf.practitionerId, date: nf.date, insurerId: nf.insurerId, pct: pctEff, lines: lignes };
     if (!d.patientId || !patients.some((x) => x.id === d.patientId)) { showToast("Choisissez le " + V.patient + "."); return; }
     if (!d.lines.length) { showToast("Ajoutez au moins un élément à facturer."); return; }
+    if (!peutProduits && d.lines.some((l) => l.cat === "produit")) { showToast("La vente de produits se fait à la pharmacie."); return; }
     if (!verifDate(d.date, "émettre la facture")) return;
     const total = saR2(d.lines.reduce((s, l) => s + l.qty * l.unit, 0));
     if (!(total > 0)) { showToast("Le total de la facture doit être supérieur à zéro."); return; }
@@ -276,7 +313,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
   const [pc, setPc] = useBrouillon("sante-remboursement", { amount: "", date: todayStr() });
   const [aj, setAj] = useState({ amount: "", motif: "" });
   const encaisser = (inv) => {
-    if (!canEdit) return;
+    if (!canFront) return;
     const amount = saR2(pp.amount), s = saSoldes(inv);
     if (inv.status === "annulee") { showToast("Cette facture est annulée."); return; }
     if (!(amount > 0)) { showToast("Indiquez un montant supérieur à zéro."); return; }
@@ -359,7 +396,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
     const inv = invoices.find((x) => x.id === sel);
     return (
       <div>
-        {canEdit && (
+        {canFront && (
           <div className="ec-card p-4 mb-5" data-testid="sante-nouvelle-facture">
             <div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle {V.Facture.toLowerCase()}</div>
             <div className="grid md:grid-cols-4 gap-2 items-end">
@@ -369,7 +406,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Assureur (facultatif)</label><select value={nf.insurerId} onChange={(e) => setNf({ ...nf, insurerId: e.target.value, pct: "" })} data-testid="sante-fact-assureur" className={ecInput} style={ecBorder}><option value="">Le {V.patient} paie tout</option>{insurers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
             </div>
             <div className="grid md:grid-cols-5 gap-2 items-end mt-2">
-              <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>{V.Acte} du catalogue</label><select value={nf.actId} onChange={(e) => setNf({ ...nf, actId: e.target.value })} data-testid="sante-fact-acte" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{acts.map((a) => <option key={a.id} value={a.id}>{a.label} — {fmt(a.price)}</option>)}</select></div>
+              <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>{V.Acte} du catalogue</label><select value={nf.actId} onChange={(e) => setNf({ ...nf, actId: e.target.value })} data-testid="sante-fact-acte" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{acts.filter((a) => peutProduits || a.cat !== "produit").map((a) => <option key={a.id} value={a.id}>{a.label} — {fmt(a.price)}</option>)}</select></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Quantité</label><input type="number" min="0" value={nf.qty} onChange={(e) => setNf({ ...nf, qty: e.target.value })} data-testid="sante-fact-qte" className={ecInput + " tabular"} style={ecBorder} /></div>
               <button onClick={ajouterLigne} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="sante-fact-ajouter">Ajouter la ligne</button>
               {nf.insurerId && <div><label className="text-xs" style={{ color: "#8A8370" }}>Part de l'assureur (%)</label><input type="number" min="0" max="100" value={nf.pct !== "" ? nf.pct : (assureurSel ? assureurSel.defaultPct : "")} onChange={(e) => setNf({ ...nf, pct: e.target.value })} data-testid="sante-fact-pct" className={ecInput + " tabular"} style={ecBorder} /></div>}
@@ -404,7 +441,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Encaissements du {V.patient}</div>
         <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th>Mode</th><th className="text-right">Montant</th><th>État</th><th></th></tr></thead>
           <tbody>{(inv.payments || []).map((p) => (<tr key={p.id} data-testid="sante-paiement-ligne" style={{ opacity: p.status === "annulé" ? 0.55 : 1 }}><td className="py-1.5">{ecDateFr(p.date)}</td><td>{p.mode === "banque" ? "Banque" : "Espèces"}</td><td className="text-right tabular">{fmt(p.amount)}</td><td>{p.status === "annulé" ? ecPastille("Annulé", "neutre") : ecPastille("Valide", "ok")}</td><td className="text-right">{canEdit && p.status !== "annulé" && <button onClick={() => annulerPaiement(inv, p)} className="text-xs" style={{ color: "#A6432F" }} data-testid="sante-paiement-annuler">Annuler</button>}</td></tr>))}</tbody></table></div>
-        {canEdit && inv.status !== "annulee" && (<div className="grid md:grid-cols-4 gap-2 mb-4 items-end">
+        {canFront && inv.status !== "annulee" && (<div className="grid md:grid-cols-4 gap-2 mb-4 items-end">
           <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant reçu</label><input type="number" min="0" value={pp.amount} onChange={(e) => setPp({ ...pp, amount: e.target.value })} data-testid="sante-enc-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>Mode</label><select value={pp.mode} onChange={(e) => setPp({ ...pp, mode: e.target.value })} data-testid="sante-enc-mode" className={ecInput} style={ecBorder}><option value="caisse">Espèces</option><option value="banque">Banque</option></select></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" value={pp.date} max={todayStr()} onChange={(e) => setPp({ ...pp, date: e.target.value })} className={ecInput} style={ecBorder} /></div>
@@ -435,7 +472,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
   // ───────── Onglets simples ─────────
   const Patients = () => (
     <div>
-      {canEdit && (<div className="ec-card p-4 mb-5"><div className="grid md:grid-cols-5 gap-2 items-end">
+      {canFront && (<div className="ec-card p-4 mb-5"><div className="grid md:grid-cols-5 gap-2 items-end">
         <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom du {V.patient}</label><input value={fp.name} onChange={(e) => setFp({ ...fp, name: e.target.value })} data-testid="sante-patient-nom" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Téléphone</label><input type="tel" value={fp.phone} onChange={(e) => setFp({ ...fp, phone: e.target.value })} className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Assureur</label><select value={fp.insurerId} onChange={(e) => setFp({ ...fp, insurerId: e.target.value })} data-testid="sante-patient-assureur" className={ecInput} style={ecBorder}><option value="">Aucun</option>{insurers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
@@ -444,7 +481,13 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
       <div className="text-xs mt-2" style={{ color: "#7A7460" }}>Données administratives seulement : n'enregistrez ici ni diagnostic, ni ordonnance, ni résultat d'examen.</div></div>)}
       <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">N°</th><th>{V.Patient}</th><th>Téléphone</th><th>Assureur</th><th className="text-right">Reste à payer</th><th></th></tr></thead>
         <tbody>{patients.map((p) => { const reste = saR2(invoices.filter((i) => i.patientId === p.id && i.status !== "annulee").reduce((s, i) => s + saSoldes(i).restePatient, 0)); return (
-          <tr key={p.id} data-testid="sante-patient-ligne"><td className="py-1.5 tabular text-xs">{p.number}</td><td>{p.name}</td><td>{p.phone || "—"}</td><td>{p.insurerId ? nomAssureur(p.insurerId) : "—"}</td><td className="text-right tabular">{fmt(reste)}</td><td className="text-right">{canEdit && <button onClick={() => delPatient(p)} className="text-xs" style={{ color: "#A6432F" }} data-testid="sante-patient-supprimer">Supprimer</button>}</td></tr>); })}</tbody></table></div>
+          <tr key={p.id} data-testid="sante-patient-ligne">{edP && edP.id === p.id ? (<>
+            <td className="py-1.5 tabular text-xs">{p.number}</td>
+            <td><input value={edP.name} onChange={(e) => setEdP({ ...edP, name: e.target.value })} data-testid="sante-patient-edit-nom" className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /><div className="mt-1"><input value={edP.policy} onChange={(e) => setEdP({ ...edP, policy: e.target.value })} placeholder="N° de police" data-testid="sante-patient-edit-police" className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /></div></td>
+            <td><input value={edP.phone} onChange={(e) => setEdP({ ...edP, phone: e.target.value })} data-testid="sante-patient-edit-tel" className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /></td>
+            <td><select value={edP.insurerId} onChange={(e) => setEdP({ ...edP, insurerId: e.target.value })} className="border rounded px-1 py-0.5 text-xs" style={ecBorder}><option value="">Aucun</option>{insurers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></td>
+            <td></td><td className="text-right whitespace-nowrap"><button onClick={modifierPatient} className="text-xs underline mr-3" data-testid="sante-patient-edit-ok">Enregistrer</button><button onClick={() => setEdP(null)} className="text-xs">Annuler</button></td></>) : (<>
+            <td className="py-1.5 tabular text-xs">{p.number}</td><td>{p.name}</td><td>{p.phone || "—"}</td><td>{p.insurerId ? nomAssureur(p.insurerId) : "—"}</td><td className="text-right tabular">{fmt(reste)}</td><td className="text-right whitespace-nowrap">{canFront && <button onClick={() => setEdP({ id: p.id, name: p.name, phone: p.phone || "", insurerId: p.insurerId || "", policy: p.policy || "" })} className="text-xs underline mr-3" data-testid="sante-patient-modifier">Modifier</button>}{canEdit && <button onClick={() => delPatient(p)} className="text-xs" style={{ color: "#A6432F" }} data-testid="sante-patient-supprimer">Supprimer</button>}</td></>)}</tr>); })}</tbody></table></div>
       {patients.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun {V.patient}.</div>}
     </div>
   );
@@ -518,7 +561,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
   const [fsj, setFsj] = useBrouillon("sante-sejour", { patientId: "", service: "", admitDate: todayStr(), rate: "" });
   const [sortieDate, setSortieDate] = useState({});
   const admettre = () => {
-    if (!canEdit) return;
+    if (!canFront) return;
     const rate = Number(fsj.rate);
     if (!fsj.patientId || !patients.some((x) => x.id === fsj.patientId)) { showToast("Choisissez le " + V.patient + "."); return; }
     if (!fsj.service.trim()) { showToast("Indiquez le service (ex. Maternité, Chirurgie)."); return; }
@@ -528,7 +571,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
     setFsj({ ...fsj, service: "", rate: fsj.rate }); showToast("Admission enregistrée.");
   };
   const facturerSejour = (st) => {
-    if (!canEdit || st.invoiceId) return;
+    if (!canFront || st.invoiceId) return;
     const sortie = sortieDate[st.id] || st.dischargeDate;
     if (!sortie) { showToast("Indiquez la date de sortie."); return; }
     if (sortie < st.admitDate) { showToast("La sortie ne peut pas précéder l'admission."); return; }
@@ -543,7 +586,7 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
   };
   const Sejours = () => (
     <div>
-      {canEdit && (<div className="ec-card p-4 mb-5"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle admission</div><div className="grid md:grid-cols-5 gap-2 items-end">
+      {canFront && (<div className="ec-card p-4 mb-5"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle admission</div><div className="grid md:grid-cols-5 gap-2 items-end">
         <div><label className="text-xs" style={{ color: "#8A8370" }}>{V.Patient}</label><select value={fsj.patientId} onChange={(e) => setFsj({ ...fsj, patientId: e.target.value })} data-testid="sante-sejour-patient" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{patients.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Service</label><input value={fsj.service} onChange={(e) => setFsj({ ...fsj, service: e.target.value })} data-testid="sante-sejour-service" className={ecInput} style={ecBorder} /></div>
         <div><label className="text-xs" style={{ color: "#8A8370" }}>Admission</label><input type="date" value={fsj.admitDate} max={todayStr()} onChange={(e) => setFsj({ ...fsj, admitDate: e.target.value })} className={ecInput} style={ecBorder} /></div>
@@ -552,9 +595,9 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
       </div></div>)}
       <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">{V.Patient}</th><th>Service</th><th>Admission</th><th>Sortie</th><th className="text-right">Tarif / jour</th><th>État</th><th></th></tr></thead>
         <tbody>{stays.map((st) => (<tr key={st.id} data-testid="sante-sejour-ligne"><td className="py-1.5">{nomPatient(st.patientId)}</td><td>{st.service}</td><td>{ecDateFr(st.admitDate)}</td>
-          <td>{st.invoiceId ? ecDateFr(st.dischargeDate) : canEdit ? <input type="date" value={sortieDate[st.id] || ""} min={st.admitDate} max={todayStr()} onChange={(e) => setSortieDate({ ...sortieDate, [st.id]: e.target.value })} data-testid="sante-sejour-sortie" className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /> : "—"}</td>
+          <td>{st.invoiceId ? ecDateFr(st.dischargeDate) : canFront ? <input type="date" value={sortieDate[st.id] || ""} min={st.admitDate} max={todayStr()} onChange={(e) => setSortieDate({ ...sortieDate, [st.id]: e.target.value })} data-testid="sante-sejour-sortie" className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /> : "—"}</td>
           <td className="text-right tabular">{fmt(st.rate)}</td><td>{st.invoiceId ? ecPastille("Facturé", "ok") : ecPastille("En cours", "attente")}</td>
-          <td className="text-right">{canEdit && !st.invoiceId && <button onClick={() => facturerSejour(st)} className="text-xs underline" data-testid="sante-sejour-facturer">Sortie et facturation</button>}</td></tr>))}</tbody></table></div>
+          <td className="text-right">{canFront && !st.invoiceId && <button onClick={() => facturerSejour(st)} className="text-xs underline" data-testid="sante-sejour-facturer">Sortie et facturation</button>}</td></tr>))}</tbody></table></div>
       {stays.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun séjour.</div>}
     </div>
   );
@@ -637,13 +680,14 @@ function SanteModule({ sante: santeTout, setSante: setSanteBrut, entries, setEnt
     );
   };
 
-  const tabs = [["apercu", "Vue d'ensemble"], ["patients", V.Patients], ["actes", V.Actes], ["factures", V.Factures], ["assureurs", "Assureurs"], ["praticiens", V.Praticiens], ...(kind === "hopital" ? [["sejours", "Séjours"]] : []), ...(kind === "pharmacie" ? [["lots", "Lots et péremptions"]] : []), ["rapports", "Rapports"]];
+  const tabs = [["apercu", "Vue d'ensemble"], ["patients", V.Patients], ["actes", V.Actes], ["factures", V.Factures], ...(isVendeur ? [] : [["assureurs", "Assureurs"], ["praticiens", V.Praticiens]]), ...(kind === "hopital" ? [["sejours", "Séjours"]] : []), ...(kind === "pharmacie" ? [["lots", "Lots et péremptions"]] : []), ...(isVendeur ? [] : [["rapports", "Rapports"]])];
   return (
     <>
       <div className={"p-4 md:p-8 max-w-6xl" + (imprimer ? " no-print" : "")} data-testid="sante-module">
         <style>{EC_CSS + '[data-testid="sante-module"] .display.text-base{border-left:3px solid #C9A24B;padding-left:10px;margin-bottom:12px}[data-testid="sante-module"] input,[data-testid="sante-module"] select,[data-testid="sante-module"] textarea{background:#fff}'}</style>
         <div className="mb-4"><div className="display text-2xl" style={{ color: "#152238" }}>Santé</div><div className="text-xs" style={{ color: "#8A8370" }}>{V.etab} — {V.Patients.toLowerCase()}, tarifs, facturation, assureurs et honoraires</div></div>
-        {!canEdit && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données.</div>}
+        {!canFront && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données.</div>}
+        {isVendeur && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }} data-testid="sante-accueil-note">Accueil : vous pouvez enregistrer les {V.Patients.toLowerCase()}, facturer et encaisser{kind === "pharmacie" ? ", et vendre les produits" : " (les produits se vendent à la pharmacie)"}. Tarifs, assureurs, annulations, honoraires et rapports sont réservés au responsable.</div>}
         <div className="ec-tabs">
           {tabs.map(([id, l]) => (<button key={id} onClick={() => setTab(id)} data-testid={"sante-tab-" + id} className="px-3 py-2 text-sm rounded-lg transition-colors" style={{ background: tab === id ? "#152238" : "transparent", color: tab === id ? "#EFE9DD" : "#6B6552", fontWeight: tab === id ? 600 : 500 }}>{l}</button>))}
         </div>
