@@ -2,7 +2,7 @@
 // @module Facturation abonnements
 // @depends FALLBACK_HTG_PER_USD, SECTEURS_CATALOGUE, fetchHtgPerUsd, friendlyError, supabase, todayStr
 //   useEffect, useState
-// @exports BillingAdminPanel, fbEnregistrerContact, fbTelValide
+// @exports BillingAdminPanel, FB_WA_MODELES, fbEnregistrerContact, fbTelValide, fbWaLien, fbWaTexte
 // ═══ FIN DE L'EN-TÊTE ═══
 // Facturation des abonnements de Compta+ à ses clients.
 //  • À la création d'une entreprise : facture d'inscription à 0 (émise par la base, voir le script SQL) ;
@@ -39,6 +39,13 @@ const FB_MSG_DEFAUT = {
   body: "Bonjour {client},\n\nSauf erreur de notre part, la facture {numero} de {montant}, à régler avant le {echeance} ({jours} jour(s) de retard), n'est pas encore payée.\n\n{paiement}\n\nVous la retrouvez dans Compta+ : Administration, Accès, Abonnement et factures.\nSi vous avez déjà payé, ignorez ce message.\n\nMerci,\n{emetteur}",
   wa: "Bonjour {client}, ici {emetteur}. Votre facture {numero} de {montant} était à régler avant le {echeance}. {paiement} Si c'est déjà payé, ignorez ce message. Merci !",
 };
+const FB_WA_MODELES = {
+  contact: "Bonjour {client}, ici {emetteur}. ",
+  nouveaute: "Bonjour {client}, ici {emetteur}. Une nouveauté vient d'arriver dans Compta+ : ",
+  offre: "Bonjour {client}, ici {emetteur}. Une offre pour vous : ",
+};
+const fbWaLien = (tel, texte) => "https://wa.me/" + fbTelChiffres(tel) + "?text=" + encodeURIComponent(texte);
+const fbWaTexte = (modele, nom, cfg) => String(modele || "").split("{client}").join(nom || "").split("{emetteur}").join((cfg && cfg.issuer_name) || "Compta+");
 const FB_RELANCE_PAUSE_JOURS = 3; // pas de nouvelle relance de masse avant 3 jours
 // Numéro pour WhatsApp : chiffres seulement, indicatif Haïti (509) ajouté si le numéro a 8 chiffres
 const fbTelChiffres = (t) => { let d = String(t || "").replace(/\D/g, ""); if (d.startsWith("00")) d = d.slice(2); if (d.length === 8) d = "509" + d; return d; };
@@ -314,6 +321,9 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
   const [comp, setComp] = useState({ companyId: "" });
   const [members, setMembers] = useState([]);
   const [relFiltre, setRelFiltre] = useState("retard");
+  const [wm, setWm] = useState({ companyId: "", type: "contact", text: FB_WA_MODELES.contact });
+  const [promoText, setPromoText] = useState(FB_WA_MODELES.offre);
+  const [promoVus, setPromoVus] = useState({});
   const charger = async () => {
     const c = await fbChargerConfig();
     const [inv, co0, gr, mb] = await Promise.all([
@@ -471,7 +481,7 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
     const c = contactDe(inv);
     if (!fbTelValide(c.phone)) { showToast("Aucun numéro WhatsApp valide pour " + inv.client_name + ". Demandez-le au client (Administration, Abonnement et factures)."); return; }
     const m = fbMessage(cfg, inv, today);
-    const url = "https://wa.me/" + fbTelChiffres(c.phone) + "?text=" + encodeURIComponent(m.wa);
+    const url = fbWaLien(c.phone, m.wa);
     try { window.open(url, "_blank", "noopener"); } catch (e) { /* bloqué par le navigateur */ }
     await marquerRelance(inv, "whatsapp"); charger();
   };
@@ -511,7 +521,7 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
             droite={<button onClick={() => relancerMasse(enRetardListe)} disabled={busy || !retards} style={fbBtnOr} data-testid="fb-rel-masse">E-mail à tous les retards ({retards})</button>} />
           <div className="flex items-center gap-2 mb-3"><label className="text-xs" style={{ color: "#8A8370" }}>Afficher</label>
             <select value={relFiltre} onChange={(e) => setRelFiltre(e.target.value)} data-testid="fb-rel-filtre" style={{ ...fbCell, width: "auto" }}><option value="retard">En retard</option><option value="dues">Toutes les factures à payer</option></select></div>
-          {aff.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }} data-testid="fb-rel-vide">Aucune facture à relancer.</div> : (
+          {aff.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }} data-testid="fb-rel-vide">Aucune facture à relancer pour le moment. Les boutons E-mail et WhatsApp apparaissent sur chaque facture en retard. Pour écrire à un client sans facture, utilisez la carte « Écrire à un client sur WhatsApp » plus bas.</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{aff.map((i) => { const c = contactDe(i); const jours = i.due_date ? Math.max(0, fbEntreJours(i.due_date, today)) : 0; return (
               <div key={i.id || i.number} data-testid="fb-rel-ligne" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 16px", border: "1px solid #EEE9DA", borderRadius: 10, padding: "12px 14px", background: "#FFFDF8", boxSizing: "border-box" }}>
                 <div style={{ flex: "2 1 220px", minWidth: 0 }}><div style={{ fontWeight: 600, color: "#152238" }}>{i.client_name}</div><div className="text-xs tabular" style={{ color: "#8A8370" }}>{i.number} · à payer avant le {fbDateFr(i.due_date)}</div>
@@ -525,6 +535,40 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
               </div>); })}</div>
           )}
         </div>
+        <div style={fbCarte} data-testid="fb-wa-libre">
+          <FbTitre couleur="#1F9D55" titre="Écrire à un client sur WhatsApp" sous="Pour prendre contact, annoncer une nouveauté ou faire une offre, sans lien avec une facture. WhatsApp s'ouvre avec le message ; vous pouvez joindre une image, un audio ou une vidéo avant d'envoyer." />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ flex: "2 1 240px" }}><label className="text-xs" style={{ color: "#8A8370" }}>Entreprise</label>
+              <select value={wm.companyId} onChange={(e) => setWm({ ...wm, companyId: e.target.value })} data-testid="fb-wa-societe" style={fbCell}><option value="">— choisir —</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}{fbTelValide(c.phone) ? "" : " (pas de numéro)"}</option>)}</select></div>
+            <div style={{ flex: "1 1 180px" }}><label className="text-xs" style={{ color: "#8A8370" }}>Modèle de message</label>
+              <select value={wm.type} onChange={(e) => setWm({ ...wm, type: e.target.value, text: FB_WA_MODELES[e.target.value] })} data-testid="fb-wa-modele" style={fbCell}><option value="contact">Prendre contact</option><option value="nouveaute">Nouveauté</option><option value="offre">Offre</option></select></div>
+          </div>
+          <div className="mt-3"><label className="text-xs" style={{ color: "#8A8370" }}>Message ({"{client}"} et {"{emetteur}"} sont remplacés)</label><textarea rows={4} value={wm.text} onChange={(e) => setWm({ ...wm, text: e.target.value })} data-testid="fb-wa-texte" style={fbCell} /></div>
+          <button onClick={() => {
+            const co = companies.find((c) => c.id === wm.companyId);
+            if (!co) { showToast("Choisissez l'entreprise."); return; }
+            if (!fbTelValide(co.phone)) { showToast("Aucun numéro WhatsApp valide pour " + co.name + ". Demandez-le au client (Administration, Abonnement et factures)."); return; }
+            try { window.open(fbWaLien(co.phone, fbWaTexte(wm.text, co.name, cfg)), "_blank", "noopener"); } catch (e) { /* bloqué */ }
+          }} style={{ ...fbBtn, background: "#1F9D55", color: "#fff", marginTop: 12 }} data-testid="fb-wa-ouvrir">Ouvrir WhatsApp</button>
+        </div>
+        {(() => {
+          const optins = companies.filter((c) => c.whatsapp_optin && fbTelValide(c.phone));
+          const restants = optins.filter((c) => !promoVus[c.id]).length;
+          return (
+            <div style={fbCarte} data-testid="fb-promo">
+              <FbTitre couleur="#5B3FA0" titre="Promotions : clients qui ont accepté WhatsApp" sous="Seules les entreprises qui ont coché l'accord (inscription ou « Vos coordonnées de contact ») apparaissent ici. Un clic ouvre WhatsApp pour chacune ; la ligne se coche après l'ouverture."
+                droite={<span className="text-xs" style={{ color: "#6F6A5A" }} data-testid="fb-promo-reste">{restants} restant(s) sur {optins.length}</span>} />
+              <label className="text-xs" style={{ color: "#8A8370" }}>Message de la promotion</label>
+              <textarea rows={3} value={promoText} onChange={(e) => setPromoText(e.target.value)} data-testid="fb-promo-texte" style={fbCell} />
+              {optins.length === 0 ? <div className="text-sm mt-3" style={{ color: "#8A8370" }} data-testid="fb-promo-vide">Aucun client n'a encore donné son accord pour les promotions WhatsApp.</div> : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>{optins.map((c) => (
+                  <div key={c.id} data-testid="fb-promo-ligne" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 16px", border: "1px solid #EEE9DA", borderRadius: 10, padding: "10px 14px", background: promoVus[c.id] ? "#F3F8F5" : "#FFFDF8" }}>
+                    <div style={{ flex: "2 1 200px", minWidth: 0 }}><div style={{ fontWeight: 600, color: "#152238" }}>{c.name}</div><div className="text-xs" style={{ color: "#6F6A5A" }}>{c.phone}</div></div>
+                    <button onClick={() => { try { window.open(fbWaLien(c.phone, fbWaTexte(promoText, c.name, cfg)), "_blank", "noopener"); } catch (e) { /* bloqué */ } setPromoVus((v) => ({ ...v, [c.id]: true })); }} style={{ ...fbBtn, background: promoVus[c.id] ? "#8AA597" : "#1F9D55", color: "#fff" }} data-testid="fb-promo-wa">{promoVus[c.id] ? "Ouvert ✓ — rouvrir" : "WhatsApp"}</button>
+                  </div>))}</div>
+              )}
+            </div>);
+        })()}
       </div>
     );
   }
