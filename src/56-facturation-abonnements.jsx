@@ -65,16 +65,19 @@ function fbBrouillon({ company_id, client_name, kind, period, issue_date, lines,
   return { company_id, client_name, kind, period_start: period.start, period_end: period.end, issue_date, due_date: fbAjouteJours(issue_date, FB_DELAI_JOURS), status: "emise", lines,
     subtotal_usd: t.subtotal_usd, monthly_full_usd: full, rate_htg_per_usd: rate, subtotal_htg: t.subtotal_htg, vat_enabled: !!vatEnabled, vat_rate: vatEnabled ? Number(vatRate) || 0 : 0, vat_htg: t.vat_htg, total_htg: t.total_htg };
 }
+// Texte ajouté à la ligne du forfait Extension : nom du groupe et entreprises couvertes
+function fbNoteGroupe(g, membres) { return " — groupe « " + g.name + " » : " + (membres || []).map((m) => m.name).join(", "); }
 // Émission du mois. Renvoie { drafts, inscriptions } : les factures mensuelles à créer et les factures d'inscription (à 0) manquantes.
 function fbEmission({ companies, groups, invoices, cfg, date, rate, vatEnabled, vatRate }) {
   const per = fbPeriode(date);
   const actives = (invoices || []).filter((i) => i.status !== "annulee");
   const dejaMensuelle = (cid) => actives.some((i) => i.company_id === cid && i.kind === "mensuelle" && i.period_end === per.end);
   const drafts = [];
-  const mensuelle = (co, entity, nom) => {
+  const mensuelle = (co, entity, nom, note) => {
     if (dejaMensuelle(co.id)) return;
     const { lines, full } = fbLignes(entity, cfg);
     let ls = lines, from = per.start;
+    if (note) ls = lines.map((l, i) => (i === 0 ? { ...l, label: l.label + note } : l));
     // première facture payante : prorata à partir de la fin de l'essai quand elle tombe dans le mois
     const fin = co.trial_ends_at ? String(co.trial_ends_at).slice(0, 10) : "";
     if (fin && fin >= per.start && fin <= per.end) from = fbAjouteJours(fin, 1);
@@ -89,7 +92,8 @@ function fbEmission({ companies, groups, invoices, cfg, date, rate, vatEnabled, 
   const groupIds = new Set((groups || []).map((g) => g.id));
   (groups || []).filter((g) => g.plan_status === "active").forEach((g) => {
     const membres = (companies || []).filter((c) => c.group_id === g.id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-    if (membres.length) mensuelle({ ...membres[0], trial_ends_at: null }, { plan_tier: "group" }, g.name);
+    // Facturée à l'entreprise principale du groupe (la plus ancienne) : son propre nom, jamais celui d'une autre entreprise ; le groupe et les entreprises couvertes sont rappelés sur la ligne
+    if (membres.length) mensuelle({ ...membres[0], trial_ends_at: null }, { plan_tier: "group" }, membres[0].name, fbNoteGroupe(g, membres));
   });
   (companies || []).filter((c) => c.plan_status === "active" && !(c.group_id && groupIds.has(c.group_id)) && !c.group_id).forEach((c) => mensuelle(c, c, c.name));
   const inscriptions = (companies || []).filter((c) => !c.group_id && !actives.some((i) => i.company_id === c.id && i.kind === "inscription")).map((c) => {
@@ -100,10 +104,10 @@ function fbEmission({ companies, groups, invoices, cfg, date, rate, vatEnabled, 
   return { drafts, inscriptions };
 }
 // Facture complémentaire : hausse du forfait ou des blocs en cours de mois, au prorata des jours restants
-function fbComplement({ company, group, invoices, cfg, date, rate, vatEnabled, vatRate }) {
+function fbComplement({ company, group, invoices, cfg, date, rate, vatEnabled, vatRate, membres }) {
   const per = fbPeriode(date);
   const entity = group ? { plan_tier: "group" } : company;
-  const nom = group ? group.name : company.name;
+  const nom = company.name;   // toujours le nom de l'entreprise à laquelle la facture est rattachée
   const liste = (invoices || []).filter((i) => i.status !== "annulee" && i.company_id === company.id && (i.kind === "mensuelle" || i.kind === "complement") && String(i.issue_date).slice(0, 7) === per.start.slice(0, 7))
     .sort((a, b) => String(a.number).localeCompare(String(b.number)));
   if (!liste.length) return { error: "Aucune facture mensuelle pour ce mois : utilisez d'abord « Émettre les factures du mois »." };
@@ -113,7 +117,7 @@ function fbComplement({ company, group, invoices, cfg, date, rate, vatEnabled, v
   if (ecart <= 0) return { error: "Aucune hausse à facturer : une baisse s'applique au mois suivant (pas d'avoir)." };
   const restant = fbEntreJours(date, per.end) + 1;
   const total = fbR2(ecart * restant / per.jours);
-  const lines = [{ label: "Changement d'abonnement : + " + fbUsd(ecart) + " par mois, du " + fbDateFr(date) + " au " + fbDateFr(per.end) + " (" + restant + "/" + per.jours + " jours)", qty: 1, unit_usd: total, total_usd: total }];
+  const lines = [{ label: "Changement d'abonnement" + (group ? " du groupe « " + group.name + " »" : "") + " : + " + fbUsd(ecart) + " par mois, du " + fbDateFr(date) + " au " + fbDateFr(per.end) + " (" + restant + "/" + per.jours + " jours)", qty: 1, unit_usd: total, total_usd: total }];
   return { draft: { ...fbBrouillon({ company_id: company.id, client_name: nom, kind: "complement", period: { start: date, end: per.end }, issue_date: date, lines, full, rate, vatEnabled, vatRate }) } };
 }
 
@@ -206,14 +210,18 @@ function BillingClientPanel({ companyId }) {
   const dues = rows.filter((i) => i.status === "emise");
   const enRetard = dues.filter((i) => i.due_date && i.due_date < today);
   return (
-    <div className="max-w-4xl" data-testid="fb-client">
+    <div className="max-w-4xl" style={{ width: "100%", boxSizing: "border-box", minWidth: 0 }} data-testid="fb-client">
       <div className="display text-xl mb-1" style={{ color: "#152238" }}>Abonnement et factures</div>
       <div className="text-xs mb-4" style={{ color: "#8A8370" }}>Vos factures Compta+ : inscription (gratuite pendant l'essai), puis une facture par mois selon votre forfait et vos blocs d'activité. Montants en gourdes au taux indiqué sur chaque facture.</div>
       {enRetard.length > 0 && <div className="p-3 rounded text-sm mb-3" style={{ background: "#F7E9E3", color: "#A6432F" }} data-testid="fb-client-retard">{enRetard.length} facture(s) en retard de paiement. Merci de régulariser.</div>}
       {rows.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }} data-testid="fb-client-vide">Aucune facture pour le moment.</div> : (
-        <table className="w-full text-sm"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">N°</th><th>Date</th><th>Période</th><th className="text-right">Total</th><th>État</th><th></th></tr></thead>
-          <tbody>{rows.map((i) => { const [l, c] = fbEtat(i, today); return (
-            <tr key={i.id || i.number} data-testid="fb-client-ligne" style={{ borderTop: "1px solid #EEE9DA" }}><td className="py-1.5 text-xs tabular">{i.number}</td><td>{fbDateFr(i.issue_date)}</td><td className="text-xs">{i.period_start ? fbDateFr(i.period_start) + " → " + fbDateFr(i.period_end) : "—"}</td><td className="text-right tabular">{fbHtg(i.total_htg)}</td><td style={{ color: c, fontWeight: 600 }}>{l}</td><td className="text-right"><button onClick={() => setVoir(i)} className="text-xs underline" data-testid="fb-client-ouvrir">Voir / Imprimer</button></td></tr>); })}</tbody></table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{rows.map((i) => { const [l, c] = fbEtat(i, today); return (
+          <div key={i.id || i.number} data-testid="fb-client-ligne" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px 16px", border: "1px solid #E4DFD1", borderRadius: 8, padding: "10px 12px", background: "#fff", boxSizing: "border-box", maxWidth: "100%" }}>
+            <div style={{ flex: "1 1 150px", minWidth: 0 }}><div className="text-xs tabular" style={{ color: "#8A8370" }}>{i.number}</div><div className="text-sm">{fbDateFr(i.issue_date)}</div></div>
+            <div style={{ flex: "1 1 190px", minWidth: 0 }} className="text-xs"><span style={{ color: "#8A8370" }}>Période</span><br />{i.period_start ? fbDateFr(i.period_start) + " → " + fbDateFr(i.period_end) : "—"}</div>
+            <div style={{ flex: "1 1 110px", minWidth: 0, textAlign: "right" }} className="tabular"><b>{fbHtg(i.total_htg)}</b><div className="text-xs" style={{ color: c, fontWeight: 600 }}>{l}</div></div>
+            <div style={{ flex: "0 0 auto" }}><button onClick={() => setVoir(i)} className="text-xs underline" data-testid="fb-client-ouvrir">Voir / Imprimer</button></div>
+          </div>); })}</div>
       )}
       {voir && <FbApercu inv={voir} cfg={cfg} onClose={() => setVoir(null)} />}
     </div>
