@@ -21,7 +21,7 @@
 
 **Pas encore dans cette version** (prévu ensuite) : l'**envoi des factures et des rappels par e-mail** (il demande une Edge Function Supabase) et le **lien de paiement MonCash** (il demande votre compte MonCash de production). En attendant, vous enregistrez les paiements vous-même et vous imprimez ou envoyez les factures en PDF.
 
-## Fichiers du paquet (8 fichiers)
+## Fichiers du paquet (9 fichiers)
 | Dossier du paquet | Fichier | Où le déposer | Action |
 |---|---|---|---|
 | supabase | facturation-abonnements.sql | **à copier dans Supabase** (étape 1), pas sur GitHub | **nouveau** |
@@ -33,8 +33,9 @@
 | src | 00-config.jsx | dossier `src` | remplace |
 | src | 39-administration-module.jsx | dossier `src` | remplace |
 | src | 43-super-admin.jsx | dossier `src` | remplace |
+| src | 50-secteurs-et-blocs.jsx | dossier `src` | remplace (une seule ligne d'en-tête change ; **indispensable**, sinon la construction est bloquée) |
 
-(3 fichiers de racine, 4 fichiers `src`, 2 scripts SQL dont un seul à exécuter.)
+(3 fichiers de racine, 5 fichiers `src`, 2 scripts SQL dont un seul à exécuter.)
 
 ## Procédure pas à pas
 ### Étape 1 — Supabase TEST (script SQL, à faire EN PREMIER)
@@ -47,7 +48,7 @@
 Dépôt **compta-plus--test** → **Add file → Upload files** → glissez les 3 fichiers du dossier `racine` → **Commit changes**.
 
 ### Étape 3 — Les fichiers du dossier `src`
-Dossier **src** → **Add file → Upload files** → glissez les 4 fichiers du dossier `src` → **Commit changes**. Une construction démarre (25 à 40 minutes). Ne redéposez rien pendant ce temps.
+Dossier **src** → **Add file → Upload files** → glissez les 5 fichiers du dossier `src` → **Commit changes**. Une construction démarre (25 à 40 minutes). Ne redéposez rien pendant ce temps.
 
 ### Étape 4 — Attendre le vert
 Onglet **Actions** : « Construire le site » doit passer au **vert**. Si rouge : ne touchez à rien, copiez-moi le texte de l'étape en échec.
