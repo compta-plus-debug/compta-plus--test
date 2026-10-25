@@ -58,4 +58,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 51-ecoles | 866 | 52-ecoles-suite, 01-garde-environnement-et-supabase, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale, 52-ecoles-suite, 53-import-export, 54-sante |
 | 52-ecoles-suite | 253 | 51-ecoles, 06-icones-et-graphiques, 10-formatage-impression-et-pdf, 07-constantes-metier, 08-composants-et-utilitaires, 00-config | 51-ecoles, 53-import-export, 54-sante |
 | 53-import-export | 683 | 51-ecoles, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 54-sante | 667 | 51-ecoles, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 54-sante | 711 | 51-ecoles, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |

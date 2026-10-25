@@ -83,9 +83,9 @@ const txt=async(p,t)=>(await g(p,t).innerText()).replace(/\s/g,'');
  await tab(p,'apercu');await g(p,'sante-etab-type').selectOption('hopital');await p.waitForTimeout(500);
  await tab(p,'patients');await g(p,'sante-patient-nom').fill('Paul Louis');await g(p,'sante-patient-ajouter').click();await p.waitForTimeout(300);
  await tab(p,'sejours');await g(p,'sante-sejour-patient').selectOption({label:'Paul Louis'});await g(p,'sante-sejour-service').fill('Chirurgie');
- const d0=new Date(Date.now()-3*86400000).toISOString().slice(0,10);await p.locator('[data-testid="sante-module"] input[type=date]').first().fill(d0);
+ const dMax=await p.locator('[data-testid="sante-module"] input[type=date]').first().getAttribute('max');const d0=new Date(new Date(dMax+'T12:00:00').getTime()-3*86400000).toISOString().slice(0,10);await p.locator('[data-testid="sante-module"] input[type=date]').first().fill(d0);
  await g(p,'sante-sejour-tarif').fill('2000');await g(p,'sante-sejour-admettre').click();await p.waitForTimeout(300);
- const d1=new Date().toISOString().slice(0,10);await g(p,'sante-sejour-sortie').fill(d1);await g(p,'sante-sejour-facturer').click();await p.waitForTimeout(600);
+ const d1=dMax;await g(p,'sante-sejour-sortie').fill(d1);await g(p,'sante-sejour-facturer').click();await p.waitForTimeout(600);
  e=(await cat(p,'entries')).filter(x=>x.kind==='sante');
  ok('séjour 3 jours × 2000 = 6000 en 7067',Math.abs(sum(e,'7067')+6000)<.01,sum(e,'7067'));
  ok('séjour marqué facturé',/Facturé/.test(await g(p,'sante-sejour-ligne').first().innerText()));
@@ -98,7 +98,7 @@ const txt=async(p,t)=>(await g(p,t).innerText()).replace(/\s/g,'');
  ok('lecture seule : module visible sans bouton de création',(await g(p,'sante-module').count())===1&&(await g(p,'sante-fact-emettre').count())===0);
  await p.close();}
 {const {p}=await boot(b,{settings:base,primary:false,pageInit:mk('Vendeur',['sante'])});await p.waitForTimeout(1200);
- ok('vendeur : pas d\'accès au module Santé',(await g(p,'sante-module').count())===0);
+ ok('vendeur : accès à l\'accueil du module Santé (v270)',(await g(p,'sante-module').count())===1&&(await g(p,'sante-tab-rapports').count())===0);
  await p.close();}
 {const {p}=await boot(b,{settings:base,primary:true,pageInit:mk('Administrateur',[])});await p.waitForTimeout(1200);
  ok('sans le secteur Santé : pas de module',(await g(p,'sante-module').count())===0&&(await g(p,'espace-sante').count())===0);
