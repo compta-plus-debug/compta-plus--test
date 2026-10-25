@@ -796,7 +796,7 @@ function AdminModule({
         setTab={setTab}
         groups={[
           { label: "Entreprise", color: { bg: "#152238", text: "#fff", light: "#E8EAF0", lightText: "#152238" }, tabs: [["entreprise", "Entreprise"], ["ouverture", "Solde d'ouverture"], ...(planTier === "assisted" && !(settings && settings.accountingOnly === true) ? [["postes", "Postes de vente"]] : [])] },
-          { label: "Accès", color: { bg: "#A6432F", text: "#fff", light: "#F7E9E3", lightText: "#A6432F" }, tabs: [["utilisateurs", "Utilisateurs"], ["espace", "Espace de travail"]] },
+          { label: "Accès", color: { bg: "#A6432F", text: "#fff", light: "#F7E9E3", lightText: "#A6432F" }, tabs: [["utilisateurs", "Utilisateurs"], ["espace", "Espace de travail"], ["abonnement", "Abonnement et factures"]] },
           { label: "Données & Suivi", color: { bg: "#0F6B5C", text: "#fff", light: "#A8D4C4", lightText: "#0F6B5C" }, tabs: [["donnees", "Données"], ["historique", "Historique"], ...(planTier === "assisted" ? [["approbations", `Approbations${(pendingApprovals || []).length ? ` (${(pendingApprovals || []).length})` : ""}`]] : [])] },
         ]}
       />
@@ -1122,6 +1122,7 @@ function AdminModule({
         <SalesStationsPanel salesStations={salesStations} setSalesStations={setSalesStations} showToast={showToast} logAudit={logAudit} isPrimaryAdmin={isPrimaryAdmin} />
       )}
 
+      {tab === "abonnement" && <BillingClientPanel companyId={_membership && _membership.companyId} />}
       {tab === "espace" && (
         <div className="max-w-xl" data-testid="espace-panel">
           <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1", overflowWrap: "anywhere" }}>
