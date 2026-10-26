@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Assistant blocs
-// @depends Menu
+// @depends —
 // @exports asstHowToBlocs, asstScanBlocs
 // ═══ FIN DE L'EN-TÊTE ═══
 // Assistant de contrôle (forfaits Assisté et Extension) — contrôles propres à chaque bloc d'activité.
@@ -123,11 +123,13 @@ function asstScanBlocs({ ecole, impex, sante, resto, products, actifs, today }) 
       push({ key: "resto-ouverte:" + o.id, severity: "medium", category: "resto", title: "Commande restée ouverte", detail: `La commande ${o.number} ouverte le ${asbFr(o.date)} n'a jamais été encaissée ni annulée (${asbDays(o.date, today)} jour(s)) : elle n'est pas comptabilisée.` });
     });
     const payees = asbRows(resto, "order").filter((o) => o.status === "payee" && ((Number(o.service) || 0) + (Number(o.tip) || 0)) > 0);
-    const verse = asbR2(asbRows(resto, "payout").filter((p) => p.status !== "annulé").reduce((sum, p) => sum + (Number(p.amount) || 0), 0));
-    const du = asbR2(payees.reduce((sum, o) => sum + (Number(o.service) || 0) + (Number(o.tip) || 0), 0) - verse);
+    const paiements = asbRows(resto, "payout").filter((p) => p.status !== "annulé");
+    const reparties = new Set(paiements.flatMap((p) => p.orderIds || []));
+    const attente = payees.filter((o) => !reparties.has(o.id));
+    const du = asbR2(attente.reduce((sum, o) => sum + (Number(o.service) || 0) + (Number(o.tip) || 0), 0));
     if (du > 0.5) {
-      const plus = payees.map((o) => o.paidDate).filter(Boolean).sort()[0];
-      if (plus && asbDays(plus, today) > 30) push({ key: "resto-service:pool", severity: "medium", category: "resto", title: "Service non reversé au personnel", detail: `${asbG(du)} de service et de pourboires encaissés attendent d'être répartis. Le plus ancien remonte au ${asbFr(plus)} (${asbDays(plus, today)} jours). Cet argent appartient au personnel, pas à l'entreprise.` });
+      const plus = attente.map((o) => o.paidDate).filter(Boolean).sort()[0];
+      if (plus && asbDays(plus, today) > 30) push({ key: "resto-service:pool", severity: "medium", category: "resto", title: "Service non reversé au personnel", detail: `${asbG(du)} de service et de pourboires encaissés attendent d'être répartis. Le plus ancien remonte au ${asbFr(plus)} (${asbDays(plus, today)} jours). Cet argent appartient au personnel, pas au restaurant.` });
     }
   }
   const rank = { high: 0, medium: 1, low: 2 };
@@ -172,23 +174,23 @@ function asstHowToBlocs(f) {
       "Si c'est une faute de frappe, corrigez le taux dans le dossier tant qu'aucune écriture n'est passée ; sinon, demandez à votre comptable comment régulariser.",
       "Si le taux est exact (opération à un taux très différent), cliquez sur « Ignorer »."] },
     "resto-recette": { why: "Sans recette, le coût du plat est inconnu : impossible de savoir si vous gagnez de l'argent dessus, et le stock ne baisse pas quand il est vendu.", steps: [
-      "Ouvrez l'espace Restauration → onglet « Menu et recettes » et cliquez sur « Recette » à côté du plat.",
+      "Ouvrez l'espace Restauration → onglet « Recettes et coûts » et cliquez sur « Recette » à côté du plat.",
       "Ajoutez chaque ingrédient (produit du stock) avec la quantité utilisée pour UNE portion.",
       "Si l'ingrédient n'existe pas encore, créez-le dans le module Stock avec son prix de revient, puis revenez.",
       "Si le plat n'est plus servi, cliquez sur « Retirer du menu ».",
       "Si c'est normal (boisson servie sans préparation, par exemple), cliquez sur « Ignorer »."] },
     "resto-marge": { why: "Quand les ingrédients coûtent plus de 70 % du prix, il ne reste presque rien pour payer le personnel, le loyer, l'électricité et les taxes.", steps: [
-      "Ouvrez l'espace Restauration → « Menu et recettes » → « Recette » du plat et vérifiez les quantités : une portion est-elle trop généreuse ?",
+      "Ouvrez l'espace Restauration → « Recettes et coûts » → « Recette » du plat et vérifiez les quantités : une portion est-elle trop généreuse ?",
       "Vérifiez le prix de revient des ingrédients dans le module Stock (une erreur de prix fausse le coût).",
       "Si les coûts sont exacts, augmentez le prix du plat ou réduisez la portion.",
       "Si c'est un plat d'appel voulu à marge faible, cliquez sur « Ignorer »."] },
     "resto-ouverte": { why: "Tant qu'une commande n'est pas encaissée, aucune écriture n'est passée : le chiffre d'affaires et l'argent en caisse ne concordent pas.", steps: [
-      "Ouvrez l'espace Restauration → « Commandes » et cliquez sur « Ouvrir » à côté de la commande indiquée.",
+      "Ouvrez l'espace Restauration → « Salle et commandes » et touchez la table (ou la commande sans table) à côté de la commande indiquée.",
       "Si le client a payé, cliquez sur « Encaisser l'addition » (la date sera celle d'aujourd'hui : notez-le si le paiement date d'un autre jour).",
       "Si le client n'a jamais consommé ou est parti sans payer, cliquez sur « Annuler la commande » ; une perte réelle se traite avec votre comptable.",
       "Prenez l'habitude de clôturer les commandes avant la fermeture."] },
     "resto-service": { why: "Le service et les pourboires sont encaissés pour le personnel : ils restent en compte 4677 (dette envers les employés) tant qu'ils ne sont pas reversés.", steps: [
-      "Ouvrez l'espace Restauration → onglet « Service ».",
+      "Ouvrez l'espace Restauration → onglet « Service et pourboires ».",
       "Vérifiez la liste des employés et leurs points (leur part), puis le montant prévu pour chacun.",
       "Choisissez espèces ou banque et cliquez sur « Répartir » : l'écriture est passée toute seule.",
       "Faites-le régulièrement (chaque semaine ou chaque quinzaine) et remettez à chaque employé sa part."] },
