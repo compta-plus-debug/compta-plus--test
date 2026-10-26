@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   construire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +43,7 @@ jobs:
       - name: Installer le générateur de styles (Tailwind 3.4.17)
         run: |
           curl -fsSL -o "$RUNNER_TEMP/tailwindcss" "https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64"
-          echo "7d24f7fa191d2193b78cd5f5a42a6093e14409521908529f42d80b11fde1f1d4 $RUNNER_TEMP/tailwindcss" | sha256sum -c -
+          echo "7d24f7fa191d2193b78cd5f5a42a6093e14409521908529f42d80b11fde1f1d4  $RUNNER_TEMP/tailwindcss" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/tailwindcss"
           echo "TAILWIND_BIN=$RUNNER_TEMP/tailwindcss" >> "$GITHUB_ENV"
 
