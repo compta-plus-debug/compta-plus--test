@@ -316,7 +316,7 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
   const [filtre, setFiltre] = useState("toutes");
   const [voir, setVoir] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [em, setEm] = useState({ date: todayStr(), rate: "", vat: null });
+  const [em, setEm] = useState({ date: todayStr(), rate: "", vat: null, companyId: "" });
   const [pay, setPay] = useState(null);
   const [comp, setComp] = useState({ companyId: "" });
   const [members, setMembers] = useState([]);
@@ -416,10 +416,22 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
   const emettre = async () => {
     if (!(rate > 0)) { showToast("Indiquez le taux de change (gourdes pour 1 USD)."); return; }
     if (!em.date) { showToast("Indiquez la date d'émission."); return; }
-    const { drafts, inscriptions } = fbEmission({ companies, groups, invoices: rows, cfg, date: em.date, rate, vatEnabled: vatOn, vatRate: cfg.vat_rate });
+    const tout = fbEmission({ companies, groups, invoices: rows, cfg, date: em.date, rate, vatEnabled: vatOn, vatRate: cfg.vat_rate });
+    let { drafts, inscriptions } = tout;
+    const cible = em.companyId ? companies.find((c) => c.id === em.companyId) : null;
+    if (cible) {
+      // une seule entreprise : sa facture mensuelle (ou celle de son groupe, facturée à l'entreprise la plus ancienne du groupe) et sa facture d'inscription si elle manque
+      const ids = new Set([cible.id]);
+      if (cible.group_id) { const premier = companies.filter((c) => c.group_id === cible.group_id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0]; if (premier) ids.add(premier.id); }
+      drafts = drafts.filter((d) => ids.has(d.company_id)); inscriptions = inscriptions.filter((i) => i.company_id === cible.id);
+      if (!drafts.length && !inscriptions.length) {
+        showToast(cible.plan_status !== "active" ? "« " + cible.name + " » n'est pas encore en forfait payant (essai ou suspendue) : pas de facture mensuelle. La première facture sera émise à son passage en forfait payant." : "Rien à émettre pour « " + cible.name + " » : sa facture de ce mois existe déjà.");
+        return;
+      }
+    }
     if (!drafts.length && !inscriptions.length) { showToast("Rien à émettre : toutes les factures de ce mois existent déjà."); return; }
     const total = fbR2(drafts.reduce((s, d) => s + d.total_htg, 0));
-    if (typeof window !== "undefined" && window.confirm && !window.confirm("Émettre " + drafts.length + " facture(s) mensuelle(s) pour " + fbHtg(total) + (inscriptions.length ? " et " + inscriptions.length + " facture(s) d'inscription à 0" : "") + " ?")) return;
+    if (typeof window !== "undefined" && window.confirm && !window.confirm((cible ? "Entreprise : « " + cible.name + " ». " : "") + "Émettre " + drafts.length + " facture(s) mensuelle(s) pour " + fbHtg(total) + (inscriptions.length ? " et " + inscriptions.length + " facture(s) d'inscription à 0" : "") + " ?")) return;
     setBusy(true);
     try { for (const d of [...inscriptions, ...drafts]) await inserer(d); showToast(drafts.length + " facture(s) émise(s)."); }
     catch (e) { showToast(friendlyError(e)); }
@@ -585,10 +597,11 @@ function BillingAdminPanel({ view, showToast, currentUserEmail }) {
       <div style={fbCarte}>
         <FbTitre couleur="#C9A24B" titre="Émettre les factures du mois" sous="Une facture par entreprise payante (et par groupe), jamais en double pour le même mois. Première facture payante : prorata dès la fin de l'essai. Les factures d'inscription à 0 manquantes sont aussi créées." />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+          <div style={{ flex: "2 1 240px" }}><label className="text-xs" style={{ color: "#8A8370" }}>Entreprise à facturer</label><select value={em.companyId} onChange={(e) => setEm({ ...em, companyId: e.target.value })} data-testid="fb-em-societe" style={fbCell}><option value="">Toutes les entreprises payantes</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}{c.plan_status === "active" ? "" : " (essai)"}</option>)}</select></div>
           <div style={{ flex: "1 1 160px" }}><label className="text-xs" style={{ color: "#8A8370" }}>Date d'émission</label><input type="date" value={em.date} max={today} onChange={(e) => setEm({ ...em, date: e.target.value })} data-testid="fb-em-date" style={fbCell} /></div>
           <div style={{ flex: "1 1 160px" }}><label className="text-xs" style={{ color: "#8A8370" }}>Taux (gourdes pour 1 USD)</label><input type="number" min="0" value={em.rate} onChange={(e) => setEm({ ...em, rate: e.target.value })} data-testid="fb-em-taux" style={fbCell} /></div>
           <label className="flex items-center gap-2 text-sm" style={{ paddingBottom: 6 }}><input type="checkbox" checked={vatOn} onChange={(e) => setEm({ ...em, vat: e.target.checked })} data-testid="fb-em-vat" /> TCA ({cfg.vat_rate} %)</label>
-          <button onClick={emettre} disabled={busy} style={fbBtnOr} data-testid="fb-em-emettre">Émettre les factures du mois</button>
+          <button onClick={emettre} disabled={busy} style={fbBtnOr} data-testid="fb-em-emettre">{em.companyId ? "Émettre la facture de cette entreprise" : "Émettre les factures du mois"}</button>
         </div>
       </div>
       <div style={fbCarte}>
