@@ -19,3 +19,4 @@ const SUPABASE_ANON_KEY = "sb_publishable_Ba1KJd2YY-eLaCy1FRECIA_C1DoyAjL";
 // K:ENV:START — garde-fou test/production : une copie publiée au mauvais endroit refuse de démarrer
 // (références coupées en deux : une recherche de texte dans un fichier ne doit trouver que la base réellement utilisée)
 const ENV_PROD_REF = ["cnmmxpwl", "govzbcfqaxqm"].join(""), ENV_TEST_REF = ["lfpqetfas", "jqnucklvwah"].join("");
+
