@@ -63,4 +63,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 56-facturation-abonnements | 640 | 08-composants-et-utilitaires, 50-secteurs-et-blocs, 09-assistance-et-anomalies, 01-garde-environnement-et-supabase, 00-config | 12-application-principale, 43-super-admin |
 | 57-assistant-blocs | 238 | — | 12-application-principale, 17-compta-assistant-de-controle |
 | 58-restauration | 795 | 51-ecoles, 06-icones-et-graphiques, 55-statistiques, 52-ecoles-suite, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 59-hotellerie | 666 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 59-hotellerie | 667 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |

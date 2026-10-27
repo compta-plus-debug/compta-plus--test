@@ -67,9 +67,6 @@ const ouvrir=async(p)=>{await p.getByText('Hôtellerie',{exact:true}).last().cli
  // service
  await g(p,'hotel-extra-service').selectOption({label:'Petit-déjeuner — 300,00 G'});await g(p,'hotel-extra-qte').fill('2');await g(p,'hotel-extra-ajouter').click();await p.waitForTimeout(300);
  ok('service ajouté au séjour',(await g(p,'hotel-extra-ligne').count())===1);
- // départ le jour même impossible
- await g(p,'hotel-depart-date').fill(today);await g(p,'hotel-partir').click();
- ok('départ le jour de l\'arrivée refusé',await msg(p,'doit être après'));
  await g(p,'hotel-voir-facture').count();
  // planning
  await tab(p,'planning');
@@ -77,6 +74,15 @@ const ouvrir=async(p)=>{await p.getByText('Hôtellerie',{exact:true}).last().cli
  // tableau de bord
  await tab(p,'apercu');
  ok('taux d\'occupation 33 % (1 chambre sur 3)',/33/.test(await g(p,'hotel-kpi-taux').innerText())&&/1 \/ 3/.test(await g(p,'hotel-kpi-occupees').innerText()));
+ await tab(p,'resa');
+ // départ avant l'arrivée refusé, départ le jour même accepté (1 nuit minimum)
+ await g(p,'hotel-depart-date').fill(add(-1));await g(p,'hotel-partir').click();
+ ok('départ avant l\'arrivée refusé',await msg(p,'avant la date d\'arrivée'));
+ await g(p,'hotel-depart-date').fill(today);await p.waitForTimeout(200);
+ ok('départ le jour de l\'arrivée : 1 nuit facturée (2 000)',re('2','000,00').test(await g(p,'hotel-tot-heberg').innerText()));
+ await g(p,'hotel-partir').click();await p.waitForTimeout(500);
+ ok('départ le jour même enregistré et facturé',(await p.evaluate(()=>window.__srv.getCat('hotel'))).some(r=>r.type==='booking'&&r.status==='partie'&&r.invoice&&r.invoice.nights===1));
+ await g(p,'hotel-apercu-fermer').click();await p.waitForTimeout(200);
  // seconde réservation puis annulation avec acompte conservé
  await tab(p,'resa');await g(p,'hotel-resa-client').selectOption({label:'Marie Dupont — 3700-0000'});
  await g(p,'hotel-resa-arrivee').fill(add(5));await g(p,'hotel-resa-depart').fill(add(6));await p.waitForTimeout(200);
