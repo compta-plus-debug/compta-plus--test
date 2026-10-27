@@ -49,8 +49,12 @@ const fermer=async(p)=>{if(await g(p,'resto-apercu-fermer').count())await g(p,'r
  const pl=await g(p,'resto-staff-ligne').allInnerTexts();
  ok('3 employés avec leur poste',pl.length===3&&/Serveur/.test(pl[0])&&/Cuisinier/.test(pl[1])&&/Plongeur/.test(pl[2]),pl);
  // commande 1 : cuisine, remise, paiement partagé
- await tab(p,'salle');await g(p,'resto-table-carte').first().click();await p.waitForTimeout(400);
- ok('table touchée : commande ouverte',(await g(p,'resto-cmd-detail').count())===1);
+ await tab(p,'salle');await g(p,'resto-table-carte').first().click();await p.waitForTimeout(300);
+ ok('sans serveur choisi : commande refusée',await msg(p,'Choisissez le serveur')&&(await g(p,'resto-cmd-detail').count())===0);
+ const opts=await g(p,'resto-cmd-serveur').locator('option').allInnerTexts();
+ ok('liste déroulante des serveurs = personnel enregistré',opts.length===4&&/Anne — Serveur/.test(opts[1]),opts);
+ await g(p,'resto-cmd-serveur').selectOption({label:'Anne — Serveur / serveuse'});await g(p,'resto-table-carte').first().click();await p.waitForTimeout(400);
+ ok('table touchée : commande ouverte au nom du serveur',(await g(p,'resto-cmd-detail').count())===1&&(await p.evaluate(()=>window.__srv.getCat('resto'))).some(r=>r.type==='order'&&r.server==='Anne'));
  const bt=(n)=>g(p,'resto-plat-bouton').filter({hasText:n}).first();
  await bt('Riz au poulet').click();await bt('Riz au poulet').click();await bt('Poulet grillé').click();await p.waitForTimeout(300);
  ok('3 plats (2 + 1) ajoutés',(await g(p,'resto-cmd-plat-ligne').count())===2&&/2/.test(await g(p,'resto-cmd-plat-ligne').first().innerText()));
