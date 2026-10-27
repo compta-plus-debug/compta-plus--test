@@ -288,7 +288,8 @@ function HotelModule({ hotel, setHotel, entries, setEntries, accounts, setAccoun
   const partir = (b) => {
     if (!canFront || b.status !== "arrivee") return;
     const depart = dep.date;
-    if (!(depart > b.from)) { showToast("La date de départ doit être après le " + ecDateFr(b.from) + "."); return; }
+    if (!depart || depart < b.from) { showToast("La date de départ ne peut pas être avant la date d'arrivée (" + ecDateFr(b.from) + "). Choisissez le " + ecDateFr(b.from) + " ou une date entre cette date et aujourd'hui."); return; }
+    if (depart > today) { showToast("Le départ s'enregistre le jour où le client part (au plus tard aujourd'hui) : choisissez une date entre le " + ecDateFr(b.from) + " et aujourd'hui."); return; }
     if (!verifDate(depart, "facturer le séjour")) return;
     const t = calcSejour(b, depart);
     const ac = acomptesDe(b);
@@ -445,7 +446,7 @@ function HotelModule({ hotel, setHotel, entries, setEntries, accounts, setAccoun
             <div><button onClick={() => addExtra(b)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="hotel-extra-ajouter">Ajouter</button></div>
           </div>)}
           {canFront && (<div className="mt-4 p-3 rounded" style={{ background: "#F4F1E6" }} data-testid="hotel-depart"><div className="display text-base mb-2" style={{ color: "#152238" }}>Départ et facturation</div>
-            <div className="grid md:grid-cols-3 gap-2 items-end mb-2"><div>{lab("Date de départ réelle")}<input type="date" value={dep.date} max={today} onChange={(e) => setDep({ ...dep, date: e.target.value })} data-testid="hotel-depart-date" className={ecInput} style={ecBorder} /></div></div>
+            <div className="grid md:grid-cols-3 gap-2 items-end mb-2"><div>{lab("Date de départ réelle (entre le " + ecDateFr(b.from) + " et aujourd'hui ; un départ le jour même de l'arrivée compte 1 nuit)")}<input type="date" value={dep.date} min={b.from} max={today} onChange={(e) => setDep({ ...dep, date: e.target.value })} data-testid="hotel-depart-date" className={ecInput} style={ecBorder} /></div></div>
             <div className="text-sm" data-testid="hotel-depart-totaux">
               <div className="flex justify-between"><span>Hébergement ({t.nuits} nuit(s) × {hoM(b.rate)})</span><span className="tabular" data-testid="hotel-tot-heberg">{hoM(t.heberg)}</span></div>
               {t.services > 0 && <div className="flex justify-between"><span>Services annexes</span><span className="tabular">{hoM(t.services)}</span></div>}
