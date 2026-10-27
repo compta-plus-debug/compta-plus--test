@@ -204,7 +204,7 @@ function EcolesModule({ ecole: ecoleTout, setEcole: setEcoleBrut, entries, setEn
       vide={!year ? "Créez d'abord une année pour voir les statistiques." : ""}
       kpis={[[V.Eleves + " inscrit(e)s", String(actifs), "ecole-stat-inscrits"], ["Attendu sur l'année", fmt(attenduS), "ecole-stat-attendu"], ["Encaissé", fmt(paye), "ecole-stat-encaisse"], ["Taux d'encaissement", (attenduS > 0 ? Math.round(paye / attenduS * 100) : 0) + " %", "ecole-stat-taux"], ["Impayés échus", fmt(impayeS), "ecole-stat-impayes"]]}
       evolution={{ titre: "Échéances et encaissements — 6 derniers mois", data, series: [{ key: "facture", name: "Échéances", color: "#9A7B1E" }, { key: "encaisse", name: "Encaissé", color: "#0F6B5C" }] }}
-      repartitions={[{ titre: "Montants attendus par " + V.classe.toLowerCase(), data: parClasse }, { titre: V.Eleves + " par " + V.classe.toLowerCase(), data: effClasse }, { titre: "Impayés échus selon l'ancienneté", data: anciennete }, { titre: "Encaissements par mode de paiement", data: Object.keys(modes).map((k) => ({ name: k, value: modes[k] })) }]} />;
+      repartitions={[{ titre: "Montants attendus par " + V.classe.toLowerCase(), data: parClasse }, { titre: V.Eleves + " par " + V.classe.toLowerCase(), data: effClasse, unite: "nombre" }, { titre: "Impayés échus selon l'ancienneté", data: anciennete }, { titre: "Encaissements par mode de paiement", data: Object.keys(modes).map((k) => ({ name: k, value: modes[k] })) }]} />;
   };
 
   // ───────── Vue d'ensemble ─────────
