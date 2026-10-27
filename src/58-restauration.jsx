@@ -212,8 +212,10 @@ function RestoModule({ resto, setResto, entries, setEntries, accounts, setAccoun
   const ouvrirCommande = (tableId) => {
     if (!canFront) return;
     if (!dishes.some((d) => d.active !== false)) { showToast("Le menu est vide : ajoutez d'abord des plats (onglet « Menu »)."); return; }
+    // le serveur se choisit dans la liste du personnel (jamais tapé à la main : une faute de frappe fausserait les rapports par serveur)
+    if (staff.some((s) => s.active !== false) && !serveur) { showToast("Choisissez le serveur dans la liste avant d'ouvrir la commande."); return; }
     const id = rsId();
-    setResto((prev) => [...(prev || []), { type: "order", id, number: numeroCommande(today), date: today, tableId: tableId || "", server: serveur.trim() || currentUserEmail || "", lines: [], status: "ouverte", createdAt: new Date().toISOString() }]);
+    setResto((prev) => [...(prev || []), { type: "order", id, number: numeroCommande(today), date: today, tableId: tableId || "", server: serveur || currentUserEmail || "", lines: [], status: "ouverte", createdAt: new Date().toISOString() }]);
     setCmdSel(id); setRem({ amount: "", reason: "" }); setTip(""); setPayRows([{ mode: "especes", amount: "" }]); setConvives("");
     showToast("Commande ouverte" + (tableId ? " sur la table " + nomTable(tableId) : " (sans table)") + ". Touchez les plats pour les ajouter.");
   };
@@ -468,7 +470,7 @@ function RestoModule({ resto, setResto, entries, setEntries, accounts, setAccoun
   const Salle = () => (
     <div>
       {canFront && (<div className="flex flex-wrap items-end gap-3 mb-4">
-        <div>{lab("Serveur (facultatif)")}<input value={serveur} onChange={(e) => setServeur(e.target.value)} data-testid="resto-cmd-serveur" className={ecInput} style={{ ...ecBorder, minWidth: 180 }} /></div>
+        <div>{lab("Serveur")}<select value={serveur} onChange={(e) => setServeur(e.target.value)} data-testid="resto-cmd-serveur" className={ecInput} style={{ ...ecBorder, minWidth: 200 }}><option value="">{staff.some((s) => s.active !== false) ? "— Choisir le serveur —" : "(aucun employé enregistré)"}</option>{[...staff.filter((s) => s.active !== false)].sort((a, b) => (b.poste === "serveur") - (a.poste === "serveur") || a.name.localeCompare(b.name)).map((s) => <option key={s.id} value={s.name}>{s.name} — {rsPoste(s.poste)}</option>)}</select>{!staff.some((s) => s.active !== false) && <div className="text-xs mt-1" style={{ color: "#A6432F" }}>Enregistrez vos serveurs dans l'onglet « Personnel » pour les choisir ici.</div>}</div>
         <button onClick={() => ouvrirCommande("")} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="resto-cmd-sans-table">Nouvelle commande sans table (comptoir, à emporter)</button>
       </div>)}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" data-testid="resto-plan">
