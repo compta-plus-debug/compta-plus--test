@@ -81,6 +81,8 @@ const ecole=[{type:'year',id:'y1',label:'2026-2027',active:true},{type:'class',i
  await g(p,'ecole-journal-du').fill(jours(-90));await p.waitForTimeout(250);
  ok('rapport : encaissé par type de frais = total du journal',re('1','500').test(await t('ecole-rapport-parfrais-montant'))&&re('1','500').test(await t('ecole-journal-total')));
  await tab(p,'stats');ok('statistiques affichées',(await g(p,'stats-bloc').count())===1);
+ const cartes=await g(p,'stats-repartition').allInnerTexts();const eff=cartes.find(x=>/par 6e|Élèves par/.test(x))||'';
+ ok('élèves par classe : en nombres, pas en gourdes',/Élèves par/.test(eff)&&!/ G\b|HTG|gourde/i.test(eff)&&/2 \(100%\)/.test(eff),eff);
  await p.close();}
 // C) assistant : échéances jamais constatées
 {const {p}=await boot(b,{settings:{companyName:'École Test',currency:'HTG'},primary:true,cats:{ecole},pageInit:init});
