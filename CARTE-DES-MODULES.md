@@ -55,12 +55,13 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 48-chargement-a-la-demande | 119 | 00-config | 49-mesures-de-performance |
 | 49-mesures-de-performance | 60 | 00-config, 48-chargement-a-la-demande, 01-garde-environnement-et-supabase | 12-application-principale |
 | 50-secteurs-et-blocs | 305 | 06-icones-et-graphiques, 08-composants-et-utilitaires, 01-garde-environnement-et-supabase, 00-config | 12-application-principale, 42-centre-de-gestion, 56-facturation-abonnements |
-| 51-ecoles | 885 | 52-ecoles-suite, 55-statistiques, 01-garde-environnement-et-supabase, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale, 52-ecoles-suite, 53-import-export, 54-sante, 58-restauration, 59-hotellerie |
-| 52-ecoles-suite | 253 | 51-ecoles, 06-icones-et-graphiques, 10-formatage-impression-et-pdf, 07-constantes-metier, 08-composants-et-utilitaires, 00-config | 51-ecoles, 53-import-export, 54-sante, 58-restauration, 59-hotellerie |
-| 53-import-export | 702 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 54-sante | 729 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 51-ecoles | 1013 | 60-ecoles-socle, 52-ecoles-suite, 55-statistiques, 01-garde-environnement-et-supabase, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale, 52-ecoles-suite |
+| 52-ecoles-suite | 253 | 51-ecoles, 06-icones-et-graphiques, 60-ecoles-socle, 10-formatage-impression-et-pdf, 07-constantes-metier, 08-composants-et-utilitaires, 00-config | 51-ecoles |
+| 53-import-export | 702 | 60-ecoles-socle, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 54-sante | 729 | 60-ecoles-socle, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 55-statistiques | 46 | 06-icones-et-graphiques | 51-ecoles, 53-import-export, 54-sante, 58-restauration, 59-hotellerie |
 | 56-facturation-abonnements | 640 | 08-composants-et-utilitaires, 50-secteurs-et-blocs, 09-assistance-et-anomalies, 01-garde-environnement-et-supabase, 00-config | 12-application-principale, 43-super-admin |
-| 57-assistant-blocs | 238 | — | 12-application-principale, 17-compta-assistant-de-controle |
-| 58-restauration | 795 | 51-ecoles, 06-icones-et-graphiques, 55-statistiques, 52-ecoles-suite, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 59-hotellerie | 667 | 51-ecoles, 55-statistiques, 52-ecoles-suite, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 57-assistant-blocs | 245 | — | 12-application-principale, 17-compta-assistant-de-controle |
+| 58-restauration | 795 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 59-hotellerie | 667 | 60-ecoles-socle, 55-statistiques, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 60-ecoles-socle | 41 | — | 51-ecoles, 52-ecoles-suite, 53-import-export, 54-sante, 58-restauration, 59-hotellerie |
