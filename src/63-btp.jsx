@@ -130,7 +130,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const [selSite, setSelSite] = useState("");
   const [selSit, setSelSit] = useState("");
   const [selDep, setSelDep] = useState("");
-  const listes = (<><datalist id="bt-dl-unite">{btUniq(["m²", "m³", "ml", "unité", "kg", "tonne", "forfait", "jour", "heure", ...sites.flatMap((s) => (s.lines || []).map((l) => l.unit))]).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-tiers">{btUniq(deps.map((d) => d.supplier)).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-ligne">{btUniq(sites.flatMap((s) => (s.lines || []).map((l) => l.label))).map((n) => <option key={n} value={n} />)}</datalist></>);
+  const listes = (<><datalist id="bt-dl-unite">{btUniq(["m²", "m³", "ml", "unité", "kg", "tonne", "forfait", "jour", "heure", ...sites.flatMap((s) => (s.lines || []).map((l) => l.unit))]).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-tiers">{btUniq(deps.map((d) => d.supplier)).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-role">{btUniq(["Conducteur de travaux", "Chef de chantier", "Ingénieur", "Architecte", "Chef d'équipe", "Topographe", "Magasinier", "Gardien", ...sites.flatMap((x) => (x.staff || []).map((m) => m.role))]).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-staff">{btUniq(sites.flatMap((x) => (x.staff || []).map((m) => m.name))).map((n) => <option key={n} value={n} />)}</datalist><datalist id="bt-dl-ligne">{btUniq(sites.flatMap((s) => (s.lines || []).map((l) => l.label))).map((n) => <option key={n} value={n} />)}</datalist></>);
 
   // ───────── Clients ─────────
   const [fcl, setFcl] = useBrouillon("btp-client", { name: "", phone: "", address: "" });
@@ -162,9 +162,19 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   };
 
   // ───────── Chantiers ─────────
-  const [fs, setFs] = useBrouillon("btp-chantier", { name: "", clientId: "", address: "", start: todayStr(), end: "", retPct: "", budget: "" });
+  const [fs, setFs] = useBrouillon("btp-chantier", { name: "", clientId: "", address: "", start: todayStr(), end: "", retPct: "", budget: "", lead: "" });
   const [sq, setSq] = useState(""); const [sst, setSst] = useState("");
   const [fl, setFl] = useState({ label: "", unit: "", qty: "", pu: "" });
+  const [fst, setFst] = useState({ name: "", role: "", phone: "" });
+  const respDe = (x) => { const st = x.staff || []; const r = st.find((m) => /chef de chantier/i.test(m.role)) || st.find((m) => /conducteur/i.test(m.role)) || st[0]; return r ? r.name : "—"; };
+  const ajouterEncadrant = (s) => {
+    if (!canEdit) return;
+    if (!fst.name.trim()) { showToast("Indiquez le nom de la personne."); return; }
+    if (!fst.role.trim()) { showToast("Indiquez sa fonction (conducteur de travaux, chef de chantier, ingénieur…)."); return; }
+    if ((s.staff || []).some((m) => btNom(m.name) === btNom(fst.name) && btNom(m.role) === btNom(fst.role))) { showToast("Cette personne est déjà affectée avec cette fonction."); return; }
+    maj(s.id, (r) => ({ ...r, staff: [...(r.staff || []), { id: btId(), name: fst.name.trim(), role: fst.role.trim(), phone: fst.phone.trim() }] }));
+    setFst({ name: "", role: fst.role, phone: "" }); showToast("Affectation enregistrée.");
+  };
   const [fav, setFav] = useState({ amount: "", mode: "caisse", date: todayStr() });
   const [frt, setFrt] = useState({ amount: "", mode: "caisse", date: todayStr() });
   const creerChantier = () => {
@@ -176,10 +186,10 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     if (fs.end && fs.start && fs.end < fs.start) { showToast("La date de fin prévue doit être après le début."); return; }
     const ret = Number(fs.retPct) || 0;
     if (ret < 0 || ret > 30) { showToast("La retenue de garantie doit être comprise entre 0 et 30 %."); return; }
-    const s = { type: "site", id: btId(), number: numero("CH", sites, fs.start || today), name, clientId: fs.clientId, address: fs.address.trim(), start: fs.start, end: fs.end, retPct: ret, budget: Number(fs.budget) || 0, status: "encours", lines: [], avances: [], createdAt: new Date().toISOString(), by: currentUserEmail || "" };
+    const s = { type: "site", id: btId(), number: numero("CH", sites, fs.start || today), name, clientId: fs.clientId, address: fs.address.trim(), start: fs.start, end: fs.end, retPct: ret, budget: Number(fs.budget) || 0, status: "encours", lines: [], avances: [], staff: fs.lead.trim() ? [{ id: btId(), name: fs.lead.trim(), role: "Chef de chantier", phone: "" }] : [], createdAt: new Date().toISOString(), by: currentUserEmail || "" };
     ajouter(s);
-    setFs({ ...fs, name: "", address: "", end: "", retPct: "", budget: "" });
-    setSelSite(s.id);
+    setFs({ ...fs, name: "", address: "", end: "", retPct: "", budget: "", lead: "" });
+    setSelSite(s.id); setSub("marche");
     showToast("Chantier " + s.number + " créé : ajoutez maintenant son bordereau de prix."); logAudit("BTP", "Chantier créé", s.number + " — " + name);
   };
   const ajouterLigne = (s) => {
@@ -236,9 +246,179 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     maj(r.id, (x) => ({ ...x, status: "annulé", reversalEntryId: e ? e.id : "" }));
     showToast("Encaissement de retenue annulé.");
   };
+  const [sub, setSub] = useState("vue");
+  const [fph, setFph] = useState({ label: "", start: "", end: "", weight: "" });
+  const [ftk, setFtk] = useState({ title: "", assignee: "", due: "", priority: "normale", phaseId: "" });
+  const [tke, setTke] = useState(""); const [tkr, setTkr] = useState("");
+  const BT_PRIO = [["haute", "Haute"], ["normale", "Normale"], ["basse", "Basse"]];
+  const BT_TSTAT = [["afaire", "À faire"], ["encours", "En cours"], ["fait", "Faite"]];
+  const phasesDe = (x) => (x.phases || []).slice().sort((a, b) => String(a.start || "9999").localeCompare(String(b.start || "9999")));
+  const etatPhase = (ph) => (ph.pct >= 100 ? "termine" : ph.end && ph.end < today ? "retard" : ph.pct > 0 || ph.realStart ? "encours" : ph.start && ph.start < today ? "demarrer" : "prevu");
+  const avPhys = (x) => { const ph = x.phases || []; if (!ph.length) return null; const w = ph.reduce((t, y) => t + (Number(y.weight) || 0), 0); return w > 0 ? Math.round(ph.reduce((t, y) => t + (Number(y.weight) || 0) * (Number(y.pct) || 0), 0) / w) : Math.round(ph.reduce((t, y) => t + (Number(y.pct) || 0), 0) / ph.length); };
+  const avFact = (x) => { const m = btMarche(x); return m > 0 ? Math.round(factureHt(x.id) * 100 / m) : 0; };
+  const tempsPct = (x) => (x.start && x.end && x.end > x.start ? Math.max(0, Math.min(100, Math.round(btJours(x.start, today) * 100 / btJours(x.start, x.end)))) : null);
+  const budgetNat = (x) => x.budgets || {};
+  const budgetTotal = (x) => { const t = btR2(Object.keys(budgetNat(x)).reduce((a, k) => a + (Number(budgetNat(x)[k]) || 0), 0)); return t > 0 ? t : Number(x.budget) || 0; };
+  const depNat = (x, kind) => btR2(deps.filter((d) => d.siteId === x.id && d.kind === kind && d.status !== "annulé").reduce((t, d) => t + d.amount, 0));
+  const tachesRetard = (x) => (x.tasks || []).filter((k) => k.status !== "fait" && k.due && k.due < today);
+  const phasesRetard = (x) => (x.phases || []).filter((ph) => etatPhase(ph) === "retard");
+  const PHASES_COURANTES = ["Installation de chantier", "Terrassement", "Fondations", "Gros œuvre", "Second œuvre", "Finitions", "Réception des travaux"];
+  const ajouterPhase = (x) => {
+    if (!canEdit) return;
+    const label = fph.label.trim();
+    if (!label) { showToast("Indiquez le nom de l'étape."); return; }
+    if ((x.phases || []).some((y) => btNom(y.label) === btNom(label))) { showToast("Cette étape existe déjà."); return; }
+    if (fph.start && fph.end && fph.end < fph.start) { showToast("La fin prévue doit être après le début prévu."); return; }
+    const w = fph.weight === "" ? 0 : Number(fph.weight);
+    if (!(w >= 0) || w > 100) { showToast("Le poids doit être compris entre 0 et 100 %."); return; }
+    maj(x.id, (r) => ({ ...r, phases: [...(r.phases || []), { id: btId(), label, start: fph.start, end: fph.end, weight: w, pct: 0, realStart: "", realEnd: "" }] }));
+    setFph({ label: "", start: "", end: "", weight: "" });
+  };
+  const insererPhases = (x) => {
+    if (!canEdit) return;
+    const deja = (x.phases || []).map((y) => btNom(y.label));
+    const nouvelles = PHASES_COURANTES.filter((n) => !deja.includes(btNom(n))).map((n) => ({ id: btId(), label: n, start: "", end: "", weight: 0, pct: 0, realStart: "", realEnd: "" }));
+    if (!nouvelles.length) { showToast("Ces étapes courantes existent déjà."); return; }
+    maj(x.id, (r) => ({ ...r, phases: [...(r.phases || []), ...nouvelles] }));
+    showToast(nouvelles.length + " étape(s) ajoutée(s) : renseignez maintenant les dates et le poids de chacune.");
+  };
+  const majPhase = (x, ph, patch) => maj(x.id, (r) => ({ ...r, phases: r.phases.map((y) => (y.id === ph.id ? { ...y, ...patch } : y)) }));
+  const changerPct = (x, ph, v) => {
+    const pct = Math.max(0, Math.min(100, Number(v) || 0));
+    majPhase(x, ph, { pct, realStart: pct > 0 && !ph.realStart ? today : ph.realStart, realEnd: pct >= 100 ? (ph.realEnd || today) : "" });
+  };
+  const majBudget = (x, kind, v) => maj(x.id, (r) => { const b = { ...(r.budgets || {}), [kind]: Math.max(0, Number(v) || 0) }; return { ...r, budgets: b, budget: btR2(Object.keys(b).reduce((t, k) => t + (Number(b[k]) || 0), 0)) }; });
+  const ajouterTache = (x) => {
+    if (!canEdit) return;
+    if (!ftk.title.trim()) { showToast("Indiquez la tâche à exécuter."); return; }
+    if (!ftk.assignee) { showToast("Choisissez la personne responsable (affectez-la d'abord au chantier si elle n'est pas dans la liste)."); return; }
+    maj(x.id, (r) => ({ ...r, tasks: [...(r.tasks || []), { id: btId(), title: ftk.title.trim(), assignee: ftk.assignee, due: ftk.due, priority: ftk.priority, phaseId: ftk.phaseId, status: "afaire", createdAt: today }] }));
+    setFtk({ ...ftk, title: "", due: "" });
+  };
+  const majTache = (x, k, patch) => maj(x.id, (r) => ({ ...r, tasks: r.tasks.map((y) => (y.id === k.id ? { ...y, ...patch } : y)) }));
+  const pastilleEtat = (e) => (e === "termine" ? ecPastille("Terminée", "ok") : e === "retard" ? ecPastille("En retard", "alerte") : e === "encours" ? ecPastille("En cours", "attente") : e === "demarrer" ? ecPastille("À démarrer", "attente") : ecPastille("Prévue", "neutre"));
+
+  const VueSite = (x) => {
+    const phys = avPhys(x), fact = avFact(x), temps = tempsPct(x), bud = budgetTotal(x), dep = depensesDe(x.id);
+    const alertes = [];
+    if (phys !== null && phys - fact >= 10) alertes.push("Les travaux exécutés (" + phys + " %) devancent la facturation (" + fact + " %) : pensez à émettre une situation de travaux.");
+    if (phys !== null && temps !== null && temps - phys >= 15 && x.status === "encours") alertes.push("Le temps écoulé (" + temps + " %) dépasse l'avancement physique (" + phys + " %) : risque de retard.");
+    if (bud > 0 && dep > bud) alertes.push("Les dépenses (" + fmt(dep) + ") dépassent le budget d'exécution (" + fmt(bud) + ").");
+    if (phasesRetard(x).length) alertes.push(phasesRetard(x).length + " étape(s) en retard sur la date de fin prévue.");
+    if (tachesRetard(x).length) alertes.push(tachesRetard(x).length + " tâche(s) en retard.");
+    const dans = (d, n) => d && d >= today && btJours(today, d) <= n;
+    const ech = [];
+    (x.phases || []).forEach((ph) => { if (ph.pct < 100 && dans(ph.start, 14) && !ph.realStart) ech.push({ d: ph.start, t: "Début de l'étape « " + ph.label + " »" }); if (ph.pct < 100 && dans(ph.end, 14)) ech.push({ d: ph.end, t: "Fin prévue de l'étape « " + ph.label + " »" }); });
+    (x.tasks || []).forEach((k) => { if (k.status !== "fait" && dans(k.due, 7)) ech.push({ d: k.due, t: "Tâche : " + k.title + " (" + k.assignee + ")" }); });
+    ech.sort((a, b) => String(a.d).localeCompare(String(b.d)));
+    const kp = [["Avancement physique", phys === null ? "—" : phys + " %", "bt-vue-phys"], ["Avancement facturé", fact + " %", "bt-vue-fact"], ["Temps écoulé", temps === null ? "—" : temps + " %", "bt-vue-temps"], ["Dépensé / budget", fmt(dep) + (bud > 0 ? " / " + fmt(bud) : ""), "bt-vue-budget"], ["Marge à ce jour (facturé − dépensé)", fmt(btR2(factureHt(x.id) - dep)), "bt-vue-marge"]];
+    return (
+      <div data-testid="bt-vue">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">{kp.map(([l, v, t]) => (<div key={t} className="ec-kpi"><div className="text-xs" style={{ color: "#8A8370" }}>{l}</div><div className="display text-base tabular" data-testid={t} style={{ color: "#152238", border: "none", padding: 0, margin: 0 }}>{v}</div></div>))}</div>
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Points d'attention</div>
+        {alertes.length === 0 ? <div className="text-sm mb-4" style={{ color: "#8A8370" }}>Rien à signaler.</div> : <div className="mb-4">{alertes.map((a, i) => (<div key={i} className="text-sm p-2 mb-1 rounded" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="bt-vue-alerte">{a}</div>))}</div>}
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Prochaines échéances (14 jours)</div>
+        {ech.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucune échéance proche.</div> : (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th>Quoi</th></tr></thead><tbody>{ech.map((e, i) => (<tr key={i} data-testid="bt-vue-echeance"><td className="py-1.5">{ecDateFr(e.d)}</td><td>{e.t}</td></tr>))}</tbody></table></div>)}
+      </div>
+    );
+  };
+
+  const EtapesSite = (x) => {
+    const ph = phasesDe(x);
+    const poids = ph.reduce((t, y) => t + (Number(y.weight) || 0), 0);
+    const avecDates = ph.filter((y) => y.start && y.end);
+    const debut = avecDates.reduce((m, y) => (y.start < m ? y.start : m), "9999-12-31"), fin = avecDates.reduce((m, y) => (y.end > m ? y.end : m), "0000-01-01");
+    const span = avecDates.length ? Math.max(1, btJours(debut, fin)) : 0;
+    const aujour = span && today >= debut && today <= fin ? (btJours(debut, today) * 100 / span) : null;
+    const couleur = { termine: "#0F6B5C", retard: "#A6432F", encours: "#C9A24B", demarrer: "#C9A24B", prevu: "#B8B2A0" };
+    const phys = avPhys(x);
+    return (
+      <div data-testid="bt-etapes">
+        <div className="text-sm mb-2" style={{ color: "#5B563F" }}>Avancement physique du chantier : <b className="tabular" data-testid="bt-et-phys">{phys === null ? "—" : phys + " %"}</b> (moyenne des étapes pondérée par leur poids dans le marché).{poids > 0 && Math.abs(poids - 100) > 0.01 && <span style={{ color: "#A6432F" }} data-testid="bt-et-poids-alerte"> Le total des poids est de {poids} % : il devrait être de 100 %.</span>}</div>
+        {avecDates.length > 0 && (<div className="mb-4" data-testid="bt-frise">
+          <div className="text-xs mb-1" style={{ color: "#8A8370" }}>Calendrier d'exécution : du {ecDateFr(debut)} au {ecDateFr(fin)}</div>
+          <div style={{ position: "relative", background: "#F4F1E6", borderRadius: 6, padding: "6px 0" }}>
+            {avecDates.map((y) => (<div key={y.id} title={y.label + " : " + ecDateFr(y.start) + " → " + ecDateFr(y.end)} style={{ position: "relative", height: 20, marginBottom: 3 }}><div style={{ position: "absolute", left: (btJours(debut, y.start) * 100 / span) + "%", width: Math.max(2, btJours(y.start, y.end) * 100 / span) + "%", height: 18, borderRadius: 4, background: couleur[etatPhase(y)], overflow: "hidden", fontSize: 10, color: "#fff", lineHeight: "18px", paddingLeft: 4, whiteSpace: "nowrap" }}>{y.label}</div></div>))}
+            {aujour !== null && <div style={{ position: "absolute", top: 0, bottom: 0, left: aujour + "%", width: 2, background: "#152238" }} title="Aujourd'hui"></div>}
+          </div>
+        </div>)}
+        {canEdit && (<div className="ec-card p-3 mb-4"><div className="grid md:grid-cols-5 gap-2 items-end">
+          <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Étape</label><input value={fph.label} onChange={(e) => setFph({ ...fph, label: e.target.value })} data-testid="bt-ph-nom" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Début prévu</label><input type="date" value={fph.start} onChange={(e) => setFph({ ...fph, start: e.target.value })} data-testid="bt-ph-debut" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={fph.end} onChange={(e) => setFph({ ...fph, end: e.target.value })} data-testid="bt-ph-fin" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Poids dans le marché (%)</label><input type="number" min="0" max="100" value={fph.weight} onChange={(e) => setFph({ ...fph, weight: e.target.value })} data-testid="bt-ph-poids" className={ecInput + " tabular"} style={ecBorder} /></div>
+        </div>
+        <div className="flex flex-wrap gap-3 mt-2"><button onClick={() => ajouterPhase(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-ph-ajouter">Ajouter l'étape</button><button onClick={() => insererPhases(x)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-ph-courantes">Insérer les étapes courantes (à ajuster)</button></div></div>)}
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Étape</th><th>Début prévu</th><th>Fin prévue</th><th className="text-right">Poids %</th><th>Début réel</th><th>Fin réelle</th><th className="text-right">Réalisé %</th><th>État</th><th></th></tr></thead>
+          <tbody>{ph.map((y) => (<tr key={y.id} data-testid="bt-phase-ligne"><td className="py-1.5">{y.label}</td>
+            <td>{canEdit ? <input type="date" value={y.start || ""} onChange={(e) => majPhase(x, y, { start: e.target.value })} className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /> : ecDateFr(y.start)}</td>
+            <td>{canEdit ? <input type="date" value={y.end || ""} onChange={(e) => majPhase(x, y, { end: e.target.value })} className="border rounded px-1 py-0.5 text-xs" style={ecBorder} /> : ecDateFr(y.end)}</td>
+            <td className="text-right">{canEdit ? <input type="number" min="0" max="100" value={y.weight === 0 ? "" : y.weight} onChange={(e) => majPhase(x, y, { weight: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} data-testid="bt-phase-poids" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 60 }} /> : y.weight}</td>
+            <td className="text-xs">{y.realStart ? ecDateFr(y.realStart) : "—"}</td><td className="text-xs">{y.realEnd ? ecDateFr(y.realEnd) : "—"}</td>
+            <td className="text-right">{canEdit ? <input type="number" min="0" max="100" value={y.pct || ""} placeholder="0" onChange={(e) => changerPct(x, y, e.target.value)} data-testid="bt-phase-pct" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 60 }} /> : y.pct}</td>
+            <td data-testid="bt-phase-etat">{pastilleEtat(etatPhase(y))}</td>
+            <td className="text-right">{canEdit && <button onClick={() => maj(x.id, (r) => ({ ...r, phases: r.phases.filter((z) => z.id !== y.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-phase-retirer">Retirer</button>}</td></tr>))}</tbody>
+          {ph.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={3}>Total ({ph.length} étape{ph.length > 1 ? "s" : ""})</td><td className="text-right tabular" data-testid="bt-phase-tot-poids">{poids}</td><td colSpan={5}></td></tr></tfoot>}</table></div>
+        {ph.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune étape : ajoutez les phases du chantier, ou insérez les étapes courantes puis renseignez leurs dates et leur poids.</div>}
+      </div>
+    );
+  };
+
+  const BudgetSite = (x) => {
+    const b = budgetNat(x);
+    const detaille = Object.keys(b).some((k) => Number(b[k]) > 0);
+    const tot = budgetTotal(x), dep = depensesDe(x.id), m = btMarche(x);
+    return (
+      <div data-testid="bt-budget">
+        <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Le budget d'exécution est ce que vous prévoyez <b>dépenser</b> pour réaliser le chantier ; il se compare automatiquement aux dépenses enregistrées. Marché (hors taxe) : <b className="tabular">{fmt(m)}</b>{tot > 0 && m > 0 && <> · marge prévue : <b className="tabular" data-testid="bt-bud-marge-prevue">{fmt(btR2(m - tot))}</b></>}</div>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Nature</th><th className="text-right">Budget prévu</th><th className="text-right">Dépensé</th><th className="text-right">Reste à engager</th><th className="text-right">Consommé</th></tr></thead>
+          <tbody>{BT_DEPENSES.map(([k, l]) => { const bu = Number(b[k]) || 0, d = depNat(x, k); return (<tr key={k} data-testid="bt-bud-ligne"><td className="py-1.5">{l}</td>
+            <td className="text-right">{canEdit ? <input type="number" min="0" value={bu || ""} placeholder="0" onChange={(e) => majBudget(x, k, e.target.value)} data-testid={"bt-bud-" + k} className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 110 }} /> : fmt(bu)}</td>
+            <td className="text-right tabular">{fmt(d)}</td><td className="text-right tabular">{bu > 0 ? fmt(btR2(bu - d)) : "—"}</td><td className="text-right tabular">{bu > 0 ? (d > bu ? ecPastille(Math.round(d * 100 / bu) + " % — dépassé", "alerte") : Math.round(d * 100 / bu) + " %") : "—"}</td></tr>); })}</tbody>
+          <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-bud-total"><td>Total</td><td className="text-right tabular" data-testid="bt-bud-tot-budget">{fmt(tot)}</td><td className="text-right tabular" data-testid="bt-bud-tot-dep">{fmt(dep)}</td><td className="text-right tabular">{tot > 0 ? fmt(btR2(tot - dep)) : "—"}</td><td className="text-right tabular">{tot > 0 ? Math.round(dep * 100 / tot) + " %" : "—"}</td></tr></tfoot></table></div>
+        {!detaille && (<div className="mt-3 grid md:grid-cols-4 gap-2 items-end"><div><label className="text-xs" style={{ color: "#8A8370" }}>Budget global (si vous ne détaillez pas par nature)</label><input type="number" min="0" value={x.budget || ""} disabled={!canEdit} onChange={(e) => maj(x.id, (r) => ({ ...r, budget: Number(e.target.value) || 0 }))} data-testid="bt-ch-budget-edit" className={ecInput + " tabular"} style={ecBorder} /></div></div>)}
+        {detaille && <div className="text-xs mt-2" style={{ color: "#7A7460" }}>Le budget total est la somme des lignes ci-dessus.</div>}
+      </div>
+    );
+  };
+
+  const TachesSite = (x) => {
+    const staff = x.staff || [];
+    const etatT = (k) => (k.status === "fait" ? "fait" : k.due && k.due < today ? "retard" : k.status);
+    const tl = (x.tasks || []).filter((k) => (!tke || etatT(k) === tke) && (!tkr || btNom(k.assignee) === btNom(tkr))).sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")));
+    const prioPoids = { haute: 0, normale: 1, basse: 2 };
+    tl.sort((a, b) => (a.status === "fait") - (b.status === "fait") || prioPoids[a.priority] - prioPoids[b.priority]);
+    const nomPhase = (id) => ((x.phases || []).find((y) => y.id === id) || {}).label || "";
+    return (
+      <div data-testid="bt-taches">
+        <div className="display text-base mb-2 mt-4" style={{ color: "#152238" }}>Tâches de l'équipe d'encadrement</div>
+        <datalist id="bt-dl-tache">{["Contrôle de l'implantation et des niveaux", "Validation des quantités exécutées pour la situation", "Visite de contrôle de la qualité des travaux", "Pointage quotidien des ouvriers", "Réception et contrôle des matériaux livrés", "Rédaction du rapport journalier", "Vérification de la sécurité sur le chantier", "Commande des matériaux de la semaine", "Coordination des sous-traitants"].map((n) => <option key={n} value={n} />)}</datalist>
+        {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-5 gap-2 items-end">
+          <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Tâche</label><input list="bt-dl-tache" value={ftk.title} onChange={(e) => setFtk({ ...ftk, title: e.target.value })} data-testid="bt-tache-titre" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Responsable</label><select value={ftk.assignee} onChange={(e) => setFtk({ ...ftk, assignee: e.target.value })} data-testid="bt-tache-resp" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name} ({m.role})</option>)}</select></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Échéance</label><input type="date" value={ftk.due} onChange={(e) => setFtk({ ...ftk, due: e.target.value })} data-testid="bt-tache-echeance" className={ecInput} style={ecBorder} /></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Priorité</label><select value={ftk.priority} onChange={(e) => setFtk({ ...ftk, priority: e.target.value })} data-testid="bt-tache-prio" className={ecInput} style={ecBorder}>{BT_PRIO.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+        </div>
+        <div className="grid md:grid-cols-5 gap-2 items-end mt-2"><div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Étape concernée (facultatif)</label><select value={ftk.phaseId} onChange={(e) => setFtk({ ...ftk, phaseId: e.target.value })} data-testid="bt-tache-etape" className={ecInput} style={ecBorder}><option value="">—</option>{phasesDe(x).map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}</select></div>
+          <button onClick={() => ajouterTache(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-tache-ajouter">Ajouter la tâche</button></div>
+        {staff.length === 0 && <div className="text-xs mt-2" style={{ color: "#8A8370" }}>Affectez d'abord une personne au chantier (section Encadrement ci-dessus) pour lui confier des tâches.</div>}</div>)}
+        <div className="flex flex-wrap gap-2 items-end mb-2">
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>État</label><select value={tke} onChange={(e) => setTke(e.target.value)} data-testid="bt-tache-filtre-etat" className={ecInput} style={ecBorder}><option value="">Tous</option><option value="afaire">À faire</option><option value="encours">En cours</option><option value="retard">En retard</option><option value="fait">Faite</option></select></div>
+          <div><label className="text-xs" style={{ color: "#8A8370" }}>Responsable</label><select value={tkr} onChange={(e) => setTkr(e.target.value)} className={ecInput} style={ecBorder}><option value="">Tous</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}</select></div>
+        </div>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Tâche</th><th>Responsable</th><th>Étape</th><th>Échéance</th><th>Priorité</th><th>État</th><th></th></tr></thead>
+          <tbody>{tl.map((k) => (<tr key={k.id} data-testid="bt-tache-ligne" style={{ opacity: k.status === "fait" ? 0.6 : 1 }}><td className="py-1.5">{k.title}</td><td className="text-xs">{k.assignee}</td><td className="text-xs">{nomPhase(k.phaseId) || "—"}</td><td>{k.due ? ecDateFr(k.due) : "—"} {etatT(k) === "retard" ? ecPastille("En retard", "alerte") : null}</td><td className="text-xs">{(BT_PRIO.find((p2) => p2[0] === k.priority) || [0, k.priority])[1]}</td>
+            <td>{canEdit ? <select value={k.status} onChange={(e) => majTache(x, k, { status: e.target.value })} data-testid="bt-tache-etat" className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{BT_TSTAT.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : (BT_TSTAT.find((v) => v[0] === k.status) || [0, k.status])[1]}</td>
+            <td className="text-right">{canEdit && <button onClick={() => maj(x.id, (r) => ({ ...r, tasks: r.tasks.filter((y) => y.id !== k.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-tache-retirer">Retirer</button>}</td></tr>))}</tbody>
+          {tl.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-tache-total"><td colSpan={7}>{tl.length} tâche{tl.length > 1 ? "s" : ""}, dont {tl.filter((k) => etatT(k) === "retard").length} en retard et {tl.filter((k) => k.status === "fait").length} faite{tl.filter((k) => k.status === "fait").length > 1 ? "s" : ""}</td></tr></tfoot>}</table></div>
+        {tl.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>{(x.tasks || []).length === 0 ? "Aucune tâche." : "Aucune tâche ne correspond à ces filtres."}</div>}
+      </div>
+    );
+  };
+
   const Chantiers = () => {
     const s = sites.find((x) => x.id === selSite);
-    const sF = sites.filter((x) => (!sst || x.status === sst) && (!sq.trim() || [x.number, x.name, nomClient(x.clientId), x.address].join(" ").toLowerCase().includes(sq.trim().toLowerCase()))).sort((a, b) => String(b.number).localeCompare(String(a.number)));
+    const sF = sites.filter((x) => (!sst || x.status === sst) && (!sq.trim() || [x.number, x.name, nomClient(x.clientId), x.address, respDe(x)].join(" ").toLowerCase().includes(sq.trim().toLowerCase()))).sort((a, b) => String(b.number).localeCompare(String(a.number)));
     const avanc = (x) => { const m = btMarche(x); return m > 0 ? Math.round(factureHt(x.id) * 100 / m) : 0; };
     return (
       <div>
@@ -247,6 +427,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom du chantier</label><input value={fs.name} onChange={(e) => setFs({ ...fs, name: e.target.value })} data-testid="bt-ch-nom" className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Client</label><select value={fs.clientId} onChange={(e) => setFs({ ...fs, clientId: e.target.value })} data-testid="bt-ch-client" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Adresse du chantier</label><input value={fs.address} onChange={(e) => setFs({ ...fs, address: e.target.value })} className={ecInput} style={ecBorder} /></div>
+          </div>
+          <div className="grid md:grid-cols-3 gap-2 items-end mt-2">
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Chef de chantier ou responsable (facultatif)</label><input list="bt-dl-staff" value={fs.lead} onChange={(e) => setFs({ ...fs, lead: e.target.value })} data-testid="bt-ch-responsable" className={ecInput} style={ecBorder} /></div>
           </div>
           <div className="grid md:grid-cols-5 gap-2 items-end mt-2">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={fs.start} onChange={(e) => setFs({ ...fs, start: e.target.value })} data-testid="bt-ch-debut" className={ecInput} style={ecBorder} /></div>
@@ -258,23 +441,44 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
           {clients.length === 0 && <div className="text-xs mt-2" style={{ color: "#8A8370" }}>Aucun client : enregistrez d'abord le maître d'ouvrage dans l'onglet Clients.</div>}
         </div>)}
         <div className="flex flex-wrap gap-2 items-end mb-2">
-          <div className="flex-1 min-w-[150px]"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (n°, chantier, client, adresse)</label><input value={sq} onChange={(e) => setSq(e.target.value)} data-testid="bt-ch-recherche" className={ecInput} style={ecBorder} /></div>
+          <div className="flex-1 min-w-[150px]"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (n°, chantier, client, adresse, responsable)</label><input value={sq} onChange={(e) => setSq(e.target.value)} data-testid="bt-ch-recherche" className={ecInput} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>État</label><select value={sst} onChange={(e) => setSst(e.target.value)} data-testid="bt-ch-filtre-etat" className={ecInput} style={ecBorder}><option value="">Tous</option>{BT_ETATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
         </div>
-        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">N°</th><th>Chantier</th><th>Client</th><th className="text-right">Marché</th><th className="text-right">Avancement</th><th className="text-right">Facturé (HT)</th><th className="text-right">Dépenses</th><th>État</th><th></th></tr></thead>
-          <tbody>{sF.map((x) => (<tr key={x.id} data-testid="bt-ch-ligne" style={{ background: x.id === selSite ? "#E6F1EE" : undefined }}><td className="py-1.5 tabular text-xs">{x.number}</td><td className="font-semibold">{x.name}</td><td>{nomClient(x.clientId)}</td><td className="text-right tabular">{fmt(btMarche(x))}</td><td className="text-right tabular">{avanc(x)} %</td><td className="text-right tabular">{fmt(factureHt(x.id))}</td><td className="text-right tabular">{fmt(depensesDe(x.id))}</td>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">N°</th><th>Chantier</th><th>Client</th><th>Responsable</th><th className="text-right">Marché</th><th className="text-right">Avancement</th><th className="text-right">Facturé (HT)</th><th className="text-right">Dépenses</th><th>État</th><th></th></tr></thead>
+          <tbody>{sF.map((x) => (<tr key={x.id} data-testid="bt-ch-ligne" style={{ background: x.id === selSite ? "#E6F1EE" : undefined }}><td className="py-1.5 tabular text-xs">{x.number}</td><td className="font-semibold">{x.name}</td><td>{nomClient(x.clientId)}</td><td className="text-xs" data-testid="bt-ch-resp">{respDe(x)}</td><td className="text-right tabular">{fmt(btMarche(x))}</td><td className="text-right tabular">{avanc(x)} %</td><td className="text-right tabular">{fmt(factureHt(x.id))}</td><td className="text-right tabular">{fmt(depensesDe(x.id))}</td>
             <td>{x.status === "termine" ? ecPastille("Terminé", "ok") : x.status === "suspendu" ? ecPastille("Suspendu", "alerte") : x.status === "preparation" ? ecPastille("En préparation", "neutre") : ecPastille("En cours", "attente")}</td>
-            <td className="text-right whitespace-nowrap"><button onClick={() => setSelSite(x.id === selSite ? "" : x.id)} className="text-xs underline" data-testid="bt-ch-ouvrir">{x.id === selSite ? "Fermer" : "Ouvrir"}</button></td></tr>))}</tbody>
-          {sF.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-ch-total-ligne"><td colSpan={3}>Total ({sF.length} chantier{sF.length > 1 ? "s" : ""})</td><td className="text-right tabular" data-testid="bt-ch-tot-marche">{fmt(btR2(sF.reduce((t, x) => t + btMarche(x), 0)))}</td><td></td><td className="text-right tabular" data-testid="bt-ch-tot-fact">{fmt(btR2(sF.reduce((t, x) => t + factureHt(x.id), 0)))}</td><td className="text-right tabular" data-testid="bt-ch-tot-dep">{fmt(btR2(sF.reduce((t, x) => t + depensesDe(x.id), 0)))}</td><td colSpan={2}></td></tr></tfoot>}</table></div>
+            <td className="text-right whitespace-nowrap"><button onClick={() => { setSelSite(x.id === selSite ? "" : x.id); setSub("vue"); }} className="text-xs underline" data-testid="bt-ch-ouvrir">{x.id === selSite ? "Fermer" : "Ouvrir"}</button></td></tr>))}</tbody>
+          {sF.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-ch-total-ligne"><td colSpan={4}>Total ({sF.length} chantier{sF.length > 1 ? "s" : ""})</td><td className="text-right tabular" data-testid="bt-ch-tot-marche">{fmt(btR2(sF.reduce((t, x) => t + btMarche(x), 0)))}</td><td></td><td className="text-right tabular" data-testid="bt-ch-tot-fact">{fmt(btR2(sF.reduce((t, x) => t + factureHt(x.id), 0)))}</td><td className="text-right tabular" data-testid="bt-ch-tot-dep">{fmt(btR2(sF.reduce((t, x) => t + depensesDe(x.id), 0)))}</td><td colSpan={2}></td></tr></tfoot>}</table></div>
         {sF.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>{sites.length === 0 ? "Aucun chantier." : "Aucun chantier ne correspond à ces filtres."}</div>}
         {s && (<div className="ec-card p-4 mt-5" data-testid="bt-ch-detail">
           <div className="display text-lg mb-1" style={{ color: "#152238" }}>{s.number} — {s.name}</div>
           <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Client : {nomClient(s.clientId)}{s.address ? " · " + s.address : ""} · du {ecDateFr(s.start)}{s.end ? " au " + ecDateFr(s.end) : ""}</div>
-          <div className="grid md:grid-cols-4 gap-2 mb-4 items-end">
+          <div className="grid md:grid-cols-4 gap-2 mb-3 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>État du chantier</label><select value={s.status} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, status: e.target.value }))} data-testid="bt-ch-etat" className={ecInput} style={ecBorder}>{BT_ETATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={s.end || ""} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, end: e.target.value }))} className={ecInput} style={ecBorder} /></div>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-4" style={{ borderBottom: "1px solid #E4DDC8", paddingBottom: 8 }}>
+            {[["vue", "Vue d'ensemble"], ["etapes", "Étapes d'exécution"], ["budget", "Budget d'exécution"], ["equipe", "Encadrement et tâches"], ["marche", "Marché, avances et retenue"]].map(([id, l]) => (<button key={id} onClick={() => setSub(id)} data-testid={"bt-sub-" + id} className="px-3 py-1.5 text-sm rounded-lg" style={{ background: sub === id ? "#E6F1EE" : "transparent", color: sub === id ? "#152238" : "#6B6552", fontWeight: sub === id ? 600 : 500, border: "1px solid " + (sub === id ? "#0F6B5C" : "#E4DDC8") }}>{l}</button>))}
+          </div>
+          {sub === "vue" && VueSite(s)}
+          {sub === "etapes" && EtapesSite(s)}
+          {sub === "budget" && BudgetSite(s)}
+          {sub === "equipe" && (<div>
+          <div className="display text-base mb-2" style={{ color: "#152238" }}>Encadrement du chantier</div>
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Nom</th><th>Fonction</th><th>Téléphone</th><th className="text-right">Tâches ouvertes</th><th></th></tr></thead>
+            <tbody>{(s.staff || []).map((m) => (<tr key={m.id} data-testid="bt-staff-ligne"><td className="py-1.5">{m.name}</td><td>{m.role}</td><td>{m.phone || "—"}</td><td className="text-right tabular">{(s.tasks || []).filter((k) => k.status !== "fait" && btNom(k.assignee) === btNom(m.name)).length}</td><td className="text-right">{canEdit && <button onClick={() => maj(s.id, (r) => ({ ...r, staff: r.staff.filter((y) => y.id !== m.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-staff-retirer">Retirer</button>}</td></tr>))}</tbody></table></div>
+          {(s.staff || []).length === 0 && <div className="text-sm mb-2" style={{ color: "#8A8370" }}>Personne n'est encore affecté à ce chantier.</div>}
+          {canEdit && (<div className="grid md:grid-cols-4 gap-2 mt-2 mb-5 items-end">
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Nom</label><input list="bt-dl-staff" value={fst.name} onChange={(e) => setFst({ ...fst, name: e.target.value })} data-testid="bt-staff-nom" className={ecInput} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Fonction (conducteur de travaux, chef de chantier…)</label><input list="bt-dl-role" value={fst.role} onChange={(e) => setFst({ ...fst, role: e.target.value })} data-testid="bt-staff-role" className={ecInput} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Téléphone (facultatif)</label><input type="tel" value={fst.phone} onChange={(e) => setFst({ ...fst, phone: e.target.value })} className={ecInput} style={ecBorder} /></div>
+            <button onClick={() => ajouterEncadrant(s)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-staff-ajouter">Affecter au chantier</button>
+          </div>)}
+          {TachesSite(s)}
+          </div>)}
+          {sub === "marche" && (<div>
+          <div className="grid md:grid-cols-3 gap-2 mb-4 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Retenue de garantie (%)</label><input type="number" min="0" max="30" step="0.5" value={s.retPct || ""} disabled={!canEdit || sitsDe(s.id).length > 0} onChange={(e) => maj(s.id, (r) => ({ ...r, retPct: Math.min(30, Math.max(0, Number(e.target.value) || 0)) }))} className={ecInput + " tabular"} style={ecBorder} /></div>
-            <div><label className="text-xs" style={{ color: "#8A8370" }}>Budget de dépenses</label><input type="number" min="0" value={s.budget || ""} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, budget: Number(e.target.value) || 0 }))} data-testid="bt-ch-budget-edit" className={ecInput + " tabular"} style={ecBorder} /></div>
           </div>
           <div className="flex items-center justify-between mb-2"><div className="display text-base" style={{ color: "#152238" }}>Bordereau de prix (devis)</div><button onClick={() => setImprimer({ kind: "devis", id: s.id })} className="text-xs underline" data-testid="bt-ch-devis">Imprimer le devis</button></div>
           <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Désignation</th><th>Unité</th><th className="text-right">Quantité</th><th className="text-right">Prix unitaire</th><th className="text-right">Montant</th><th></th></tr></thead>
@@ -307,6 +511,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Mode</label><select value={frt.mode} onChange={(e) => setFrt({ ...frt, mode: e.target.value })} className={ecInput} style={ecBorder}><option value="caisse">Espèces</option><option value="banque">Banque</option></select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" value={frt.date} max={todayStr()} onChange={(e) => setFrt({ ...frt, date: e.target.value })} className={ecInput} style={ecBorder} /></div>
             <button onClick={() => liberer(s)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-retrel-valider">Encaisser la retenue</button>
+          </div>)}
           </div>)}
         </div>)}
       </div>
@@ -611,7 +816,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     const afaire = [];
     sA.filter((x) => btSolde(x).reste > 0.004 && btJours(x.date, today) > 30).forEach((x) => afaire.push({ tab: "situations", sel: x.id, nom: nomClient(x.clientId), txt: "Situation " + x.number + " (" + nomSite(x.siteId) + ") impayée depuis " + btJours(x.date, today) + " jours : reste " + fmt(btSolde(x).reste) }));
     sites.filter((s) => (s.status === "encours" || s.status === "preparation") && s.end && s.end < today).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Fin prévue le " + ecDateFr(s.end) + " dépassée (" + btJours(s.end, today) + " jours) : chantier toujours ouvert" }));
-    sites.filter((s) => s.budget > 0 && depensesDe(s.id) > s.budget).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Dépenses " + fmt(depensesDe(s.id)) + " au-dessus du budget de " + fmt(s.budget) }));
+    sites.filter((s) => budgetTotal(s) > 0 && depensesDe(s.id) > budgetTotal(s)).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "budget", nom: s.name, txt: "Dépenses " + fmt(depensesDe(s.id)) + " au-dessus du budget de " + fmt(budgetTotal(s)) }));
+    sites.filter((s) => s.status !== "termine" && phasesRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "etapes", nom: s.name, txt: phasesRetard(s).length + " étape(s) en retard sur la date de fin prévue" }));
+    sites.filter((s) => s.status !== "termine" && tachesRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "equipe", nom: s.name, txt: tachesRetard(s).length + " tâche(s) de l'encadrement en retard" }));
     sites.filter((s) => s.status === "encours" && depensesDe(s.id) > 0 && !derniere(s.id)).forEach((s) => afaire.push({ tab: "situations", nom: s.name, txt: "Dépenses engagées (" + fmt(depensesDe(s.id)) + ") mais aucune situation encore émise" }));
     sites.filter((s) => s.status === "termine" && retenueDue(s.id) > 0.004).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Chantier terminé : retenue de garantie de " + fmt(retenueDue(s.id)) + " à réclamer au client" }));
     deps.filter((d) => btResteDep(d) > 0.004 && btJours(d.date, today) > 30).forEach((d) => afaire.push({ tab: "depenses", sel: d.id, nom: d.supplier || nomSite(d.siteId), txt: "Dette de " + fmt(btResteDep(d)) + " à régler depuis " + btJours(d.date, today) + " jours (" + d.label + ")" }));
@@ -640,12 +847,12 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
         <div style={{ display: "none" }} data-testid="bt-kpi-afaire">{afaire.length}</div>
         {afaire.length === 0 ? <div className="text-sm mb-5" style={{ color: "#8A8370" }}>Rien en attente.</div> : (
           <div className="ec-wrap mb-5"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Concerné</th><th>À faire</th><th></th></tr></thead>
-            <tbody>{afaire.slice(0, 15).map((x, i) => (<tr key={i} data-testid="bt-afaire-ligne"><td className="py-1.5">{x.nom}</td><td>{x.txt}</td><td className="text-right"><button className="text-xs underline" data-testid="bt-afaire-ouvrir" onClick={() => { if (isVendeur && (x.tab === "chantiers" || x.tab === "depenses")) return; setTab(x.tab); if (x.sel && x.tab === "chantiers") setSelSite(x.sel); if (x.sel && x.tab === "situations") setSelSit(x.sel); if (x.sel && x.tab === "depenses") setSelDep(x.sel); }}>Ouvrir</button></td></tr>))}</tbody></table></div>
+            <tbody>{afaire.slice(0, 15).map((x, i) => (<tr key={i} data-testid="bt-afaire-ligne"><td className="py-1.5">{x.nom}</td><td>{x.txt}</td><td className="text-right"><button className="text-xs underline" data-testid="bt-afaire-ouvrir" onClick={() => { if (isVendeur && (x.tab === "chantiers" || x.tab === "depenses")) return; setTab(x.tab); if (x.sel && x.tab === "chantiers") { setSelSite(x.sel); setSub(x.sub || "vue"); } if (x.sel && x.tab === "situations") setSelSit(x.sel); if (x.sel && x.tab === "depenses") setSelDep(x.sel); }}>Ouvrir</button></td></tr>))}</tbody></table></div>
         )}
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Chantiers en cours</div>
         {enCours.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucun chantier en cours.</div> : (
-          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Chantier</th><th>Client</th><th className="text-right">Marché</th><th className="text-right">Avancement facturé</th><th>Fin prévue</th></tr></thead>
-            <tbody>{enCours.map((s) => { const m = btMarche(s); return (<tr key={s.id} data-testid="bt-encours-ligne"><td className="py-1.5">{s.name}</td><td>{nomClient(s.clientId)}</td><td className="text-right tabular">{fmt(m)}</td><td className="text-right tabular">{m > 0 ? Math.round(factureHt(s.id) * 100 / m) : 0} %</td><td>{s.end ? ecDateFr(s.end) : "—"}</td></tr>); })}</tbody></table></div>
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Chantier</th><th>Client</th><th>Responsable</th><th className="text-right">Marché</th><th className="text-right">Avancement facturé</th><th>Fin prévue</th></tr></thead>
+            <tbody>{enCours.map((s) => { const m = btMarche(s); return (<tr key={s.id} data-testid="bt-encours-ligne"><td className="py-1.5">{s.name}</td><td>{nomClient(s.clientId)}</td><td className="text-xs">{respDe(s)}</td><td className="text-right tabular">{fmt(m)}</td><td className="text-right tabular">{m > 0 ? Math.round(factureHt(s.id) * 100 / m) : 0} %</td><td>{s.end ? ecDateFr(s.end) : "—"}</td></tr>); })}</tbody></table></div>
         )}
       </div>
     );
