@@ -6,6 +6,7 @@ const iso=(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+St
 const jours=(n)=>{const d=new Date();d.setHours(12);d.setDate(d.getDate()+n);return iso(d)};
 const S='[\\s\\u202f\\u00a0]?';const re=(a,b)=>new RegExp('^'+a+S+b);
 const mk=(role)=>new Function("(function(){try{localStorage.clear();sessionStorage.clear()}catch(e){}var S=window.__srv;S.tables.companies[0].plan_tier='assisted';S.tables.companies[0].sectors=['btp'];S.tables.companies[0].sectors_locked=true;S.tables.company_members[0].role="+JSON.stringify(role)+";})()");
+const sub=async(p,id)=>{await g(p,'bt-sub-'+id).click();await p.waitForTimeout(250)};
 const tab=async(p,id)=>{await g(p,'bt-tab-'+id).click();await p.waitForTimeout(350)};
 const cat=(p,c)=>p.evaluate((c)=>window.__srv.getCat(c)||[],c);
 const sum=(e,acc)=>e.reduce((s,x)=>s+x.lines.filter(l=>l.account===acc).reduce((a,l)=>a+l.debit-l.credit,0),0);
@@ -14,7 +15,7 @@ const data=[
  {type:'client',id:'c1',name:'Société Delmas',phone:'3700-1',address:''},
  {type:'client',id:'c2',name:'Mme Pierre',phone:'',address:''},
  {type:'site',id:'s1',number:'CH-'+an+'-0001',name:'Villa Pétion-Ville',clientId:'c1',address:'Pétion-Ville',start:jours(-60),end:'',retPct:5,budget:30000,status:'encours',
-  lines:[{id:'l1',label:'Maçonnerie',unit:'m²',qty:100,pu:500},{id:'l2',label:'Peinture',unit:'m²',qty:200,pu:100}],avances:[{id:'a1',date:jours(-55),amount:7000,mode:'caisse',entryId:'',status:'valide'}]},
+  lines:[{id:'l1',label:'Maçonnerie',unit:'m²',qty:100,pu:500},{id:'l2',label:'Peinture',unit:'m²',qty:200,pu:100}],avances:[{id:'a1',date:jours(-55),amount:7000,mode:'caisse',entryId:'',status:'valide'}],staff:[{id:'m1',name:'Pierre Noël',role:'Conducteur de travaux',phone:'3600-1'},{id:'m2',name:'Jean Louis',role:'Chef de chantier',phone:''}]},
  {type:'site',id:'s2',number:'CH-'+an+'-0002',name:'Entrepôt Tabarre',clientId:'c2',address:'',start:jours(-90),end:jours(-10),retPct:0,budget:0,status:'encours',lines:[{id:'l3',label:'Dalle',unit:'m²',qty:10,pu:1000}],avances:[]},
  {type:'sit',id:'z0',number:'DC-'+an+'-0001',n:1,date:jours(-45),siteId:'s2',clientId:'c2',cum:{l3:3},lignes:[{id:'l3',label:'Dalle',unit:'m²',qty:10,pu:1000,prevQty:0,cumQty:3,montant:3000}],marche:10000,cumHt:3000,prevHt:0,ht:3000,tcaRate:0,tca:0,ttc:3000,retPct:0,retenue:0,recup:0,net:3000,entryId:'',status:'emise',payments:[]},
  {type:'dep',id:'d1',date:jours(-20),siteId:'s1',kind:'materiaux',supplier:'',label:'Ciment',amount:40000,mode:'caisse',entryId:'',status:'valide',settlements:[]},
@@ -31,8 +32,18 @@ const data=[
  await g(p,'bt-client-nom').fill('societe delmas');await g(p,'bt-client-ajouter').click();await p.waitForTimeout(400);
  ok('client ajouté, doublon refusé',(await g(p,'bt-client-ligne').count())===1);
  await tab(p,'chantiers');
- await g(p,'bt-ch-nom').fill('Maison A');await g(p,'bt-ch-client').selectOption({index:1});await g(p,'bt-ch-retenue').fill('5');await g(p,'bt-ch-creer').click();await p.waitForTimeout(500);
+ await g(p,'bt-ch-nom').fill('Maison A');await g(p,'bt-ch-responsable').fill('Marc Léger');await g(p,'bt-ch-client').selectOption({index:1});await g(p,'bt-ch-retenue').fill('5');await g(p,'bt-ch-creer').click();await p.waitForTimeout(500);
  ok('chantier créé et ouvert',(await g(p,'bt-ch-ligne').count())===1&&(await g(p,'bt-ch-detail').count())===1&&/CH-\d{4}-0001/.test(await g(p,'bt-ch-detail').innerText()));
+ await sub(p,'equipe');
+ ok('chef de chantier saisi à la création : affecté et affiché',(await g(p,'bt-staff-ligne').count())===1&&/Chef de chantier/.test(await g(p,'bt-staff-ligne').innerText())&&/Marc Léger/.test(await g(p,'bt-ch-resp').innerText()),await g(p,'bt-staff-ligne').count());
+ await g(p,'bt-staff-nom').fill('Anne Paul');await g(p,'bt-staff-role').fill('Ingénieur');await g(p,'bt-staff-ajouter').click();await p.waitForTimeout(350);
+ await g(p,'bt-staff-nom').fill('Anne Paul');await g(p,'bt-staff-role').fill('ingénieur');await g(p,'bt-staff-ajouter').click();await p.waitForTimeout(350);
+ ok('encadrement : 2 personnes (doublon refusé)',(await g(p,'bt-staff-ligne').count())===2,await g(p,'bt-staff-ligne').count());
+ await g(p,'bt-staff-nom').fill('Sans Fonction');await g(p,'bt-staff-role').fill('');await g(p,'bt-staff-ajouter').click();await p.waitForTimeout(300);
+ ok('fonction obligatoire',(await g(p,'bt-staff-ligne').count())===2);
+ await g(p,'bt-staff-retirer').nth(1).click();await p.waitForTimeout(300);
+ ok('personne retirée',(await g(p,'bt-staff-ligne').count())===1);
+ await sub(p,'marche');
  await g(p,'bt-lg-label').fill('Terrassement');await g(p,'bt-lg-unite').fill('m³');await g(p,'bt-lg-qte').fill('50');await g(p,'bt-lg-pu').fill('1200');await g(p,'bt-lg-ajouter').click();await p.waitForTimeout(400);
  ok('ligne ajoutée : marché 60 000',(await g(p,'bt-ligne').count())===1&&re('60','000').test(await g(p,'bt-marche').innerText()),await g(p,'bt-marche').innerText().catch(()=>''));
  await g(p,'bt-ch-retenue').count();
@@ -46,10 +57,15 @@ const data=[
  ok('2 chantiers : marchés 80 000, facturé 3 000, dépenses 45 000',(await g(p,'bt-ch-ligne').count())===2&&re('80','000').test(await t('bt-ch-tot-marche'))&&re('3','000').test(await t('bt-ch-tot-fact'))&&re('45','000').test(await t('bt-ch-tot-dep')),[await t('bt-ch-tot-marche'),await t('bt-ch-tot-fact'),await t('bt-ch-tot-dep')]);
  await g(p,'bt-ch-recherche').fill('entrepôt');await p.waitForTimeout(250);
  ok('recherche par nom',(await g(p,'bt-ch-ligne').count())===1);
+ await g(p,'bt-ch-recherche').fill('jean louis');await p.waitForTimeout(250);
+ ok('recherche par responsable : la villa, responsable = le chef de chantier',(await g(p,'bt-ch-ligne').count())===1&&/Jean Louis/.test(await g(p,'bt-ch-resp').innerText()),await g(p,'bt-ch-resp').allInnerTexts());
  await g(p,'bt-ch-recherche').fill('');await g(p,'bt-ch-filtre-etat').selectOption('termine');await p.waitForTimeout(250);
  ok('filtre « Terminé » : aucun',(await g(p,'bt-ch-ligne').count())===0);
  await g(p,'bt-ch-filtre-etat').selectOption('');await p.waitForTimeout(250);
  await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa")  [data-testid="bt-ch-ouvrir"]').click();await p.waitForTimeout(350);
+ await sub(p,'equipe');
+ ok('fiche : encadrement de 2 personnes (conducteur et chef de chantier)',(await g(p,'bt-staff-ligne').count())===2);
+ await sub(p,'marche');
  ok('fiche : marché 70 000, avance reçue 7 000, retenue à libérer 0',re('70','000').test(await t('bt-marche'))&&re('7','000').test(await t('bt-avance-recue'))&&/^0/.test((await t('bt-retenue-due')).trim()),[await t('bt-marche'),await t('bt-avance-recue'),await t('bt-retenue-due')]);
  await g(p,'bt-lg-label').fill('Carrelage');await g(p,'bt-lg-qte').fill('10');await g(p,'bt-lg-pu').fill('800');await g(p,'bt-lg-ajouter').click();await p.waitForTimeout(350);
  ok('ligne ajoutée : marché 78 000',re('78','000').test(await t('bt-marche')),await t('bt-marche'));
@@ -136,6 +152,7 @@ const data=[
  await tab(p,'chantiers');
  if((await g(p,'bt-ch-detail').count())===0)await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa") [data-testid="bt-ch-ouvrir"]').click();
  await p.waitForTimeout(300);
+ await sub(p,'marche');
  ok('retenue à libérer 3 500',re('3','500').test(await t('bt-retenue-due')),await t('bt-retenue-due'));
  await g(p,'bt-retrel-valider').click();await p.waitForTimeout(400);
  ok('retenue refusée tant que le chantier n\'est pas terminé',(await g(p,'bt-retrel-ligne').count())===0);
@@ -155,6 +172,7 @@ const data=[
  await tab(p,'chantiers');
  if((await g(p,'bt-ch-detail').count())===0)await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa") [data-testid="bt-ch-ouvrir"]').click();
  await p.waitForTimeout(300);
+ await sub(p,'marche');
  await g(p,'bt-retrel-annuler').click();await p.waitForTimeout(500);
  await tab(p,'situations');
  await g(p,'bt-sit-filtre-etat').selectOption('soldee');await p.waitForTimeout(250);
@@ -168,6 +186,51 @@ const data=[
  ok('situation 2 annulée : 4117 = 1 500 et 4191 = 3 000 (situation 1 seule)',Math.abs(sum(tb,'4117')-1500)<.01&&Math.abs(sum(tb,'4191')-3000)<.01,[sum(tb,'4117'),sum(tb,'4191')]);
  await g(p,'bt-sit-filtre-etat').selectOption('annulee');await p.waitForTimeout(250);
  ok('filtre « Annulée » : 1 situation',(await g(p,'bt-sit-ligne-liste').count())===1);
+ // dossier de projet : étapes, budget, tâches
+ await tab(p,'chantiers');
+ if((await g(p,'bt-ch-detail').count())===0)await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa") [data-testid="bt-ch-ouvrir"]').click();
+ await p.waitForTimeout(300);await sub(p,'vue');
+ ok('vue d\'ensemble : avancement physique « — » sans étape',/—/.test(await t('bt-vue-phys')),await t('bt-vue-phys'));
+ await sub(p,'etapes');
+ await g(p,'bt-ph-courantes').click();await p.waitForTimeout(350);
+ ok('étapes courantes insérées (7, sans dates ni poids)',(await g(p,'bt-phase-ligne').count())===7,await g(p,'bt-phase-ligne').count());
+ for(let i=0;i<7;i++){await g(p,'bt-phase-retirer').first().click();await p.waitForTimeout(150);}
+ ok('étapes retirées',(await g(p,'bt-phase-ligne').count())===0);
+ await g(p,'bt-ph-nom').fill('Fondations');await g(p,'bt-ph-debut').fill(jours(-20));await g(p,'bt-ph-fin').fill(jours(-5));await g(p,'bt-ph-poids').fill('60');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(300);
+ await g(p,'bt-ph-nom').fill('Élévation');await g(p,'bt-ph-debut').fill(jours(-4));await g(p,'bt-ph-fin').fill(jours(30));await g(p,'bt-ph-poids').fill('40');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(300);
+ ok('2 étapes, total des poids 100, pas d\'alerte',(await g(p,'bt-phase-ligne').count())===2&&(await t('bt-phase-tot-poids')).trim()==='100'&&(await g(p,'bt-et-poids-alerte').count())===0);
+ ok('frise affichée et étape non terminée dépassée = en retard',(await g(p,'bt-frise').count())===1&&/retard/i.test(await g(p,'bt-phase-etat').first().innerText()),await g(p,'bt-phase-etat').first().innerText());
+ await g(p,'bt-ph-nom').fill('Fondations');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(250);
+ ok('étape en double refusée',(await g(p,'bt-phase-ligne').count())===2);
+ await g(p,'bt-phase-pct').first().fill('100');await p.waitForTimeout(300);
+ ok('étape à 100 % : terminée',/Termin/.test(await g(p,'bt-phase-etat').first().innerText()),await g(p,'bt-phase-etat').first().innerText());
+ await g(p,'bt-phase-pct').nth(1).fill('50');await p.waitForTimeout(300);
+ ok('avancement physique pondéré = 80 %',/80/.test(await t('bt-et-phys')),await t('bt-et-phys'));
+ await g(p,'bt-ph-nom').fill('Finitions');await g(p,'bt-ph-poids').fill('10');await g(p,'bt-ph-debut').fill('');await g(p,'bt-ph-fin').fill('');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(300);
+ ok('total des poids 110 : alerte affichée',(await g(p,'bt-et-poids-alerte').count())===1);
+ await g(p,'bt-phase-retirer').nth(2).click();await p.waitForTimeout(250);
+ await sub(p,'vue');
+ ok('vue d\'ensemble : avancement physique 80 %',/80/.test(await t('bt-vue-phys')),await t('bt-vue-phys'));
+ await sub(p,'budget');
+ await g(p,'bt-bud-materiaux').fill('20000');await g(p,'bt-bud-maindoeuvre').fill('10000');await p.waitForTimeout(300);
+ ok('budget d\'exécution par nature : total 30 000',re('30','000').test(await t('bt-bud-tot-budget')),await t('bt-bud-tot-budget'));
+ ok('budget : 6 natures',(await g(p,'bt-bud-ligne').count())===6);
+ await sub(p,'equipe');
+ await g(p,'bt-tache-ajouter').click();await p.waitForTimeout(250);
+ ok('tâche sans titre refusée',(await g(p,'bt-tache-ligne').count())===0);
+ await g(p,'bt-tache-titre').fill('Visite de contrôle des fondations');await g(p,'bt-tache-resp').selectOption({index:1});await g(p,'bt-tache-echeance').fill(jours(-2));await g(p,'bt-tache-ajouter').click();await p.waitForTimeout(300);
+ ok('tâche ajoutée et en retard',(await g(p,'bt-tache-ligne').count())===1&&/retard/i.test(await g(p,'bt-tache-ligne').innerText()),await g(p,'bt-tache-ligne').innerText());
+ await sub(p,'vue');
+ ok('vue d\'ensemble : alertes facturation en retard sur les travaux, budget dépassé, tâche en retard',(await g(p,'bt-vue-alerte').filter({hasText:'devancent la facturation'}).count())===1&&(await g(p,'bt-vue-alerte').filter({hasText:'dépassent le budget'}).count())===1&&(await g(p,'bt-vue-alerte').filter({hasText:'tâche'}).count())===1,await g(p,'bt-vue-alerte').allInnerTexts());
+ await g(p,'bt-ch-etat').selectOption('encours');await p.waitForTimeout(400);
+ await tab(p,'apercu');
+ ok('« À faire » : tâche en retard signalée',(await g(p,'bt-afaire-ligne').filter({hasText:'tâche'}).count())===1,await g(p,'bt-afaire-ligne').allInnerTexts());
+ await tab(p,'chantiers');
+ if((await g(p,'bt-ch-detail').count())===0)await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa") [data-testid="bt-ch-ouvrir"]').click();
+ await p.waitForTimeout(300);await sub(p,'equipe');
+ await g(p,'bt-tache-etat').first().selectOption('fait');await p.waitForTimeout(300);
+ ok('tâche faite : plus en retard',!/retard/i.test(await g(p,'bt-tache-ligne').innerText())&&/1 faite/.test(await t('bt-tache-total')),await t('bt-tache-total'));
+ await tab(p,'situations');
  // petit écran
  await g(p,'bt-sit-filtre-etat').selectOption('');
  await p.setViewportSize({width:390,height:800});
