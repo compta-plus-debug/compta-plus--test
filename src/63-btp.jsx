@@ -62,7 +62,7 @@ function btResteDep(d) {
   return btR2(d.amount - (d.settlements || []).filter((x) => x.status !== "annulé").reduce((t, x) => t + x.amount, 0));
 }
 
-function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail }) {
+function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail, employees, setEmployees, payslips }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // secrétariat : clients, situations et encaissements
   const canFront = canEdit || isVendeur;
@@ -73,6 +73,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const sits = btRows(btp, "sit");
   const deps = btRows(btp, "dep");
   const rels = btRows(btp, "retrel");
+  const grades = btRows(btp, "grade");
+  const workers = btRows(btp, "worker");
+  const pts = btRows(btp, "pt");
   const cfg = btRows(btp, "config")[0] || {};
   const tcaOn = !!cfg.tcaOn;
   const tcaRate = tcaOn ? Number(settings.taxRate) || 0 : 0;
@@ -109,7 +112,22 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const avanceRecuperee = (siteId) => btR2(sitsDe(siteId).reduce((t, x) => t + (x.recup || 0), 0));
   const retenueDue = (siteId) => btR2(sitsDe(siteId).reduce((t, x) => t + (x.retenue || 0), 0) - rels.filter((r) => r.siteId === siteId && r.status !== "annulé").reduce((t, r) => t + r.amount, 0));
   const factureHt = (siteId) => { const d = derniere(siteId); return d ? d.cumHt : 0; };
-  const depensesDe = (siteId) => btR2(deps.filter((d) => d.siteId === siteId && d.status !== "annulé").reduce((t, d) => t + d.amount, 0));
+  // Salaires versés via le module Salaires, affectés au chantier au prorata des jours pointés dans la période du bulletin
+  const salairesAffectes = (siteId) => {
+    let tot = 0;
+    (payslips || []).forEach((ps) => {
+      if (ps.status === "annulé") return;
+      const w = workers.find((y) => y.employeeId && String(y.employeeId) === String(ps.employeeId));
+      if (!w) return;
+      const dans = (p) => p.workerId === w.id && p.date >= ps.periodStart && p.date <= ps.periodEnd;
+      const tous = pts.filter(dans).reduce((t, p) => t + (Number(p.units) || 0), 0);
+      const ici = pts.filter((p) => dans(p) && p.siteId === siteId).reduce((t, p) => t + (Number(p.units) || 0), 0);
+      if (tous <= 0 || ici <= 0) return;
+      tot += ((Number(ps.grossTotal) || 0) + (Number(ps.employerTotal) || 0)) * ici / tous;
+    });
+    return btR2(tot);
+  };
+  const depensesDe = (siteId) => btR2(deps.filter((d) => d.siteId === siteId && d.status !== "annulé").reduce((t, d) => t + d.amount, 0) + salairesAffectes(siteId));
   const calcSit = (site, cumQty) => {
     const prev = derniere(site.id);
     const prevHt = prev ? prev.cumHt : 0;
@@ -246,6 +264,83 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     maj(r.id, (x) => ({ ...x, status: "annulé", reversalEntryId: e ? e.id : "" }));
     showToast("Encaissement de retenue annulé.");
   };
+  const [mosub, setMosub] = useState("grille");
+  const [fgr, setFgr] = useState({ label: "", rate: "" });
+  const [fpl, setFpl] = useState({ gradeId: "", count: "", days: "" });
+  const [fcr, setFcr] = useState({ name: "", gradeId: "", phone: "", start: "", end: "" });
+  const [ptDate, setPtDate] = useState(today);
+  const [payFrom, setPayFrom] = useState(today.slice(0, 8) + "01");
+  const [payTo, setPayTo] = useState(today);
+  const nomGrade = (id) => (grades.find((g) => g.id === id) || {}).label || "—";
+  const tauxGrade = (id) => Number((grades.find((g) => g.id === id) || {}).rate) || 0;
+  const joursOuv = (wid, from, to, siteId) => btR2(pts.filter((p) => p.workerId === wid && (!siteId || p.siteId === siteId) && (!from || p.date >= from) && (!to || p.date <= to)).reduce((t, p) => t + (Number(p.units) || 0), 0));
+  const brutOuv = (wid, from, to, siteId) => btR2(pts.filter((p) => p.workerId === wid && (!siteId || p.siteId === siteId) && (!from || p.date >= from) && (!to || p.date <= to)).reduce((t, p) => t + (Number(p.units) || 0) * (Number(p.rate) || 0), 0));
+  const coutPointe = (siteId) => btR2(pts.filter((p) => p.siteId === siteId).reduce((t, p) => t + (Number(p.units) || 0) * (Number(p.rate) || 0), 0));
+  const planCout = (x) => btR2((x.plan || []).reduce((t, r) => t + (Number(r.count) || 0) * (Number(r.days) || 0) * tauxGrade(r.gradeId), 0));
+  const moisDe = (start, end) => { const m = {}; if (!start || !end || end < start) return m; const d = new Date(start + "T12:00:00"), f = new Date(end + "T12:00:00"); let n = 0; while (d <= f && n < 3700) { const k = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); m[k] = (m[k] || 0) + 1; d.setDate(d.getDate() + 1); n++; } return m; };
+  const ajouterGrade = () => {
+    if (!canEdit) return;
+    const label = fgr.label.trim(), rate = Number(fgr.rate);
+    if (!label) { showToast("Indiquez la qualification (ex. maçon, manœuvre)."); return; }
+    if (!(rate > 0)) { showToast("Le taux journalier doit être supérieur à zéro."); return; }
+    if (grades.some((g) => btNom(g.label) === btNom(label))) { showToast("Cette qualification existe déjà."); return; }
+    ajouter({ type: "grade", id: btId(), label, rate });
+    setFgr({ label: "", rate: "" });
+  };
+  const retirerGrade = (g) => {
+    if (!canEdit) return;
+    if (workers.some((w) => w.gradeId === g.id) || sites.some((s) => (s.plan || []).some((r) => r.gradeId === g.id))) { showToast("Cette qualification est utilisée (ouvriers ou plan de main-d'œuvre) : elle ne peut pas être retirée."); return; }
+    setBtp((prev) => (prev || []).filter((r) => r.id !== g.id));
+  };
+  const ajouterPlan = (x) => {
+    if (!canEdit) return;
+    if (!fpl.gradeId) { showToast("Choisissez la qualification (grille salariale)."); return; }
+    if (!(Number(fpl.count) > 0) || !(Number(fpl.days) > 0)) { showToast("Indiquez l'effectif et le nombre de jours par personne."); return; }
+    if ((x.plan || []).some((r) => r.gradeId === fpl.gradeId)) { showToast("Cette qualification est déjà dans le plan : modifiez sa ligne."); return; }
+    maj(x.id, (r) => ({ ...r, plan: [...(r.plan || []), { id: btId(), gradeId: fpl.gradeId, count: Number(fpl.count), days: Number(fpl.days) }] }));
+    setFpl({ gradeId: "", count: "", days: "" });
+  };
+  const ajouterAffectation = (x) => {
+    if (!canEdit) return;
+    const nom = fcr.name.trim();
+    if (!nom) { showToast("Indiquez le nom de l'ouvrier."); return; }
+    if (fcr.end && fcr.start && fcr.end < fcr.start) { showToast("La fin d'affectation doit être après le début."); return; }
+    let w = workers.find((y) => btNom(y.name) === btNom(nom));
+    if (!w) {
+      if (!fcr.gradeId) { showToast("Choisissez la qualification du nouvel ouvrier (grille salariale)."); return; }
+      w = { type: "worker", id: btId(), name: nom, gradeId: fcr.gradeId, phone: fcr.phone.trim(), nif: "", employeeId: "", active: true };
+      ajouter(w);
+    }
+    if ((x.crew || []).some((c) => c.workerId === w.id && (!c.end || c.end >= today))) { showToast("Cette personne est déjà affectée à ce chantier."); return; }
+    maj(x.id, (r) => ({ ...r, crew: [...(r.crew || []), { id: btId(), workerId: w.id, start: fcr.start || today, end: fcr.end }] }));
+    setFcr({ name: "", gradeId: fcr.gradeId, phone: "", start: "", end: "" });
+  };
+  const pointer = (x, w, units) => {
+    if (!canEdit) return;
+    if (!ptDate || isFutureDate(ptDate)) { showToast("Le pointage ne peut pas être daté dans le futur."); return; }
+    const rate = tauxGrade(w.gradeId);
+    setBtp((prev) => [...(prev || []).filter((r) => !(r.type === "pt" && r.siteId === x.id && r.workerId === w.id && r.date === ptDate)), ...(units > 0 ? [{ type: "pt", id: btId(), siteId: x.id, workerId: w.id, date: ptDate, units, rate }] : [])]);
+  };
+  const lierRH = (w) => {
+    if (!canEdit || !setEmployees) return;
+    if (w.employeeId) { showToast("Cet ouvrier est déjà lié au module Salaires."); return; }
+    const existant = (employees || []).find((e) => btNom(e.name) === btNom(w.name) && !e.btpWorkerId);
+    if (existant) { maj(w.id, (r) => ({ ...r, employeeId: existant.id })); showToast("Lié à la fiche « " + existant.name + " » déjà présente dans Salaires (son salaire de base n'est pas modifié par BTP)."); return; }
+    const emp = { id: uid(), createdAt: new Date().toISOString(), name: w.name, position: nomGrade(w.gradeId), nif: w.nif || "", baseSalary: tauxGrade(w.gradeId), payFrequency: "hebdomadaire", overtimeRate: 0, active: true, hireDate: today, btpWorkerId: w.id };
+    setEmployees((prev) => [...(prev || []), emp]);
+    maj(w.id, (r) => ({ ...r, employeeId: emp.id }));
+    logAudit("BTP", "Ouvrier relié au module Salaires", w.name);
+    showToast("Fiche créée dans Salaires pour " + w.name + ". Utilisez l'onglet « Paie » pour préparer chaque bulletin.");
+  };
+  const preparerSalaire = (w, brut) => {
+    if (!canEdit || !setEmployees) return;
+    const emp = (employees || []).find((e) => String(e.id) === String(w.employeeId));
+    if (!emp || emp.btpWorkerId !== w.id) { showToast("Le salaire de base de cette fiche n'est pas géré par BTP : saisissez le montant directement dans Salaires."); return; }
+    if (!(brut > 0)) { showToast("Aucun jour pointé sur cette période."); return; }
+    setEmployees((prev) => (prev || []).map((e) => (e.id === emp.id ? { ...e, baseSalary: brut } : e)));
+    logAudit("BTP", "Salaire de base préparé pour la période", w.name + " : " + brut);
+    showToast("Salaire de base de " + w.name + " mis à " + fmt(brut) + ". Allez dans Salaires → Bulletins de paie pour émettre le bulletin (cotisations incluses).");
+  };
   const [sub, setSub] = useState("vue");
   const [fph, setFph] = useState({ label: "", start: "", end: "", weight: "" });
   const [ftk, setFtk] = useState({ title: "", assignee: "", due: "", priority: "normale", phaseId: "" });
@@ -259,7 +354,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const tempsPct = (x) => (x.start && x.end && x.end > x.start ? Math.max(0, Math.min(100, Math.round(btJours(x.start, today) * 100 / btJours(x.start, x.end)))) : null);
   const budgetNat = (x) => x.budgets || {};
   const budgetTotal = (x) => { const t = btR2(Object.keys(budgetNat(x)).reduce((a, k) => a + (Number(budgetNat(x)[k]) || 0), 0)); return t > 0 ? t : Number(x.budget) || 0; };
-  const depNat = (x, kind) => btR2(deps.filter((d) => d.siteId === x.id && d.kind === kind && d.status !== "annulé").reduce((t, d) => t + d.amount, 0));
+  const depNat = (x, kind) => btR2(deps.filter((d) => d.siteId === x.id && d.kind === kind && d.status !== "annulé").reduce((t, d) => t + d.amount, 0) + (kind === "maindoeuvre" ? salairesAffectes(x.id) : 0));
   const tachesRetard = (x) => (x.tasks || []).filter((k) => k.status !== "fait" && k.due && k.due < today);
   const phasesRetard = (x) => (x.phases || []).filter((ph) => etatPhase(ph) === "retard");
   const PHASES_COURANTES = ["Installation de chantier", "Terrassement", "Fondations", "Gros œuvre", "Second œuvre", "Finitions", "Réception des travaux"];
@@ -297,6 +392,108 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   };
   const majTache = (x, k, patch) => maj(x.id, (r) => ({ ...r, tasks: r.tasks.map((y) => (y.id === k.id ? { ...y, ...patch } : y)) }));
   const pastilleEtat = (e) => (e === "termine" ? ecPastille("Terminée", "ok") : e === "retard" ? ecPastille("En retard", "alerte") : e === "encours" ? ecPastille("En cours", "attente") : e === "demarrer" ? ecPastille("À démarrer", "attente") : ecPastille("Prévue", "neutre"));
+
+  const MoSite = (x) => {
+    const crew = (x.crew || []).map((c) => ({ ...c, w: workers.find((y) => y.id === c.workerId) })).filter((c) => c.w);
+    const actifs = crew.filter((c) => (!c.start || c.start <= ptDate) && (!c.end || c.end >= ptDate));
+    const sal = salairesAffectes(x.id);
+    const btnS = (id, l) => (<button key={id} onClick={() => setMosub(id)} data-testid={"bt-mo-" + id} className="px-3 py-1 text-xs rounded-lg" style={{ background: mosub === id ? "#E6F1EE" : "transparent", border: "1px solid " + (mosub === id ? "#0F6B5C" : "#E4DDC8"), color: "#152238", fontWeight: mosub === id ? 600 : 500 }}>{l}</button>);
+    const lab = (t) => <label className="text-xs" style={{ color: "#8A8370" }}>{t}</label>;
+    const mensu = (() => {
+      const m = moisDe(x.start, x.end), tj = Object.values(m).reduce((t, n) => t + n, 0);
+      if (!tj) return [];
+      return Object.keys(m).sort().map((k) => ({ k, jh: btR2((x.plan || []).reduce((t, r) => t + (Number(r.count) || 0) * (Number(r.days) || 0), 0) * m[k] / tj), cout: btR2(planCout(x) * m[k] / tj) }));
+    })();
+    const moisFr = (k) => ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."][Number(k.slice(5)) - 1] + " " + k.slice(0, 4);
+    return (
+      <div data-testid="bt-mo">
+        <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Ouvriers du chantier, grille salariale, effectifs prévus sur la durée des travaux, pointage et préparation de la paie (reliée au module Salaires). Les taux journaliers sont ceux que <b>vous</b> fixez : rien n'est préréglé.</div>
+        <div className="flex flex-wrap gap-1 mb-4">{btnS("grille", "Grille salariale")}{btnS("plan", "Plan de main-d'œuvre")}{btnS("equipe", "Ouvriers affectés")}{btnS("pointage", "Pointage")}{btnS("paie", "Paie")}</div>
+        <datalist id="bt-dl-qualif">{["Maçon", "Manœuvre", "Ferrailleur", "Coffreur", "Charpentier", "Carreleur", "Plombier", "Électricien", "Peintre", "Soudeur", "Conducteur d'engins", "Gardien"].map((n) => <option key={n} value={n} />)}</datalist>
+        <datalist id="bt-dl-ouvriers">{workers.map((w) => <option key={w.id} value={w.name} />)}</datalist>
+
+        {mosub === "grille" && (<div data-testid="bt-grille">
+          <div className="text-xs mb-2" style={{ color: "#7A7460" }}>La grille est commune à tous vos chantiers : une qualification et son taux par jour de travail (gourdes).</div>
+          {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-4 gap-2 items-end">
+            <div className="md:col-span-2">{lab("Qualification")}<input list="bt-dl-qualif" value={fgr.label} onChange={(e) => setFgr({ ...fgr, label: e.target.value })} data-testid="bt-gr-nom" className={ecInput} style={ecBorder} /></div>
+            <div>{lab("Taux par jour (G)")}<input type="number" min="0" value={fgr.rate} onChange={(e) => setFgr({ ...fgr, rate: e.target.value })} data-testid="bt-gr-taux" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <button onClick={ajouterGrade} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-gr-ajouter">Ajouter</button></div></div>)}
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Qualification</th><th className="text-right">Taux par jour</th><th className="text-right">Ouvriers</th><th></th></tr></thead>
+            <tbody>{grades.map((g) => (<tr key={g.id} data-testid="bt-gr-ligne"><td className="py-1.5">{g.label}</td>
+              <td className="text-right">{canEdit ? <input type="number" min="0" value={g.rate} onChange={(e) => maj(g.id, (r) => ({ ...r, rate: Math.max(0, Number(e.target.value) || 0) }))} data-testid="bt-gr-taux-edit" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 100 }} /> : fmt(g.rate)}</td>
+              <td className="text-right tabular">{workers.filter((w) => w.gradeId === g.id).length}</td>
+              <td className="text-right">{canEdit && <button onClick={() => retirerGrade(g)} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-gr-retirer">Retirer</button>}</td></tr>))}</tbody>
+            {grades.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={4}>{grades.length} qualification{grades.length > 1 ? "s" : ""}</td></tr></tfoot>}</table></div>
+          {grades.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune qualification : ajoutez celles de vos équipes avec leur taux journalier.</div>}
+          {grades.length > 0 && <div className="text-xs mt-2" style={{ color: "#7A7460" }}>Changer un taux n'affecte que les pointages futurs : les jours déjà pointés gardent le taux de leur date.</div>}
+        </div>)}
+
+        {mosub === "plan" && (<div data-testid="bt-plan">
+          <div className="text-xs mb-2" style={{ color: "#7A7460" }}>Les effectifs prévus pour ce chantier, répartis sur toute la durée entre le début et la fin prévue du chantier.</div>
+          {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-5 gap-2 items-end">
+            <div className="md:col-span-2">{lab("Qualification")}<select value={fpl.gradeId} onChange={(e) => setFpl({ ...fpl, gradeId: e.target.value })} data-testid="bt-pl-grade" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{grades.map((g) => <option key={g.id} value={g.id}>{g.label} ({fmt(g.rate)}/jour)</option>)}</select></div>
+            <div>{lab("Effectif prévu")}<input type="number" min="0" value={fpl.count} onChange={(e) => setFpl({ ...fpl, count: e.target.value })} data-testid="bt-pl-effectif" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <div>{lab("Jours par personne")}<input type="number" min="0" value={fpl.days} onChange={(e) => setFpl({ ...fpl, days: e.target.value })} data-testid="bt-pl-jours" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <button onClick={() => ajouterPlan(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-pl-ajouter">Ajouter</button></div>
+            {grades.length === 0 && <div className="text-xs mt-2" style={{ color: "#8A8370" }}>Définissez d'abord la grille salariale (onglet « Grille salariale »).</div>}</div>)}
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Qualification</th><th className="text-right">Effectif</th><th className="text-right">Jours / pers.</th><th className="text-right">Jours-homme</th><th className="text-right">Taux</th><th className="text-right">Coût prévu</th><th></th></tr></thead>
+            <tbody>{(x.plan || []).map((r) => (<tr key={r.id} data-testid="bt-pl-ligne"><td className="py-1.5">{nomGrade(r.gradeId)}</td><td className="text-right tabular">{r.count}</td><td className="text-right tabular">{r.days}</td><td className="text-right tabular">{btR2(r.count * r.days)}</td><td className="text-right tabular">{fmt(tauxGrade(r.gradeId))}</td><td className="text-right tabular">{fmt(btR2(r.count * r.days * tauxGrade(r.gradeId)))}</td>
+              <td className="text-right">{canEdit && <button onClick={() => maj(x.id, (z) => ({ ...z, plan: z.plan.filter((y) => y.id !== r.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-pl-retirer">Retirer</button>}</td></tr>))}</tbody>
+            {(x.plan || []).length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td>Total</td><td className="text-right tabular">{(x.plan || []).reduce((t, r) => t + Number(r.count), 0)}</td><td></td><td className="text-right tabular" data-testid="bt-pl-tot-jh">{btR2((x.plan || []).reduce((t, r) => t + r.count * r.days, 0))}</td><td></td><td className="text-right tabular" data-testid="bt-pl-tot-cout">{fmt(planCout(x))}</td><td></td></tr></tfoot>}</table></div>
+          {(x.plan || []).length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun effectif prévu.</div>}
+          {(x.plan || []).length > 0 && (<div className="mt-4">
+            <div className="display text-base mb-2" style={{ color: "#152238" }}>Répartition dans le temps</div>
+            {mensu.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }} data-testid="bt-pl-sans-dates">Renseignez le début et la fin prévue du chantier pour voir la répartition mois par mois.</div> : (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Mois</th><th className="text-right">Jours-homme</th><th className="text-right">Coût prévu</th></tr></thead><tbody>{mensu.map((m) => (<tr key={m.k} data-testid="bt-pl-mois"><td className="py-1.5">{moisFr(m.k)}</td><td className="text-right tabular">{m.jh}</td><td className="text-right tabular">{fmt(m.cout)}</td></tr>))}</tbody></table></div>)}
+            {canEdit && <div className="mt-3"><button onClick={() => { majBudget(x, "maindoeuvre", planCout(x)); showToast("Budget de main-d'œuvre mis à " + fmt(planCout(x)) + " (onglet Budget d'exécution)."); }} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-pl-reporter">Reporter ce coût dans le budget d'exécution</button></div>}
+          </div>)}
+        </div>)}
+
+        {mosub === "equipe" && (<div data-testid="bt-ouvriers">
+          {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-5 gap-2 items-end">
+            <div className="md:col-span-2">{lab("Nom de l'ouvrier")}<input list="bt-dl-ouvriers" value={fcr.name} onChange={(e) => setFcr({ ...fcr, name: e.target.value })} data-testid="bt-cr-nom" className={ecInput} style={ecBorder} /></div>
+            <div>{lab("Qualification (nouvel ouvrier)")}<select value={fcr.gradeId} onChange={(e) => setFcr({ ...fcr, gradeId: e.target.value })} data-testid="bt-cr-grade" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{grades.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select></div>
+            <div>{lab("Téléphone")}<input value={fcr.phone} onChange={(e) => setFcr({ ...fcr, phone: e.target.value })} className={ecInput} style={ecBorder} /></div>
+            <div>{lab("Affecté depuis le")}<input type="date" value={fcr.start} onChange={(e) => setFcr({ ...fcr, start: e.target.value })} data-testid="bt-cr-debut" className={ecInput} style={ecBorder} /></div>
+          </div><div className="flex flex-wrap gap-3 mt-2 items-end"><div>{lab("Jusqu'au (facultatif)")}<input type="date" value={fcr.end} onChange={(e) => setFcr({ ...fcr, end: e.target.value })} className={ecInput} style={ecBorder} /></div><button onClick={() => ajouterAffectation(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-cr-ajouter">Affecter au chantier</button></div>
+          <div className="text-xs mt-2" style={{ color: "#8A8370" }}>Un nom déjà connu (liste) reprend la fiche de l'ouvrier : il peut travailler sur plusieurs chantiers. Sinon une nouvelle fiche est créée avec la qualification choisie.</div></div>)}
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Ouvrier</th><th>Qualification</th><th className="text-right">Taux / jour</th><th>Affectation</th><th className="text-right">Jours pointés</th><th className="text-right">Coût pointé</th><th>Salaires</th><th></th></tr></thead>
+            <tbody>{crew.map((c) => (<tr key={c.id} data-testid="bt-cr-ligne"><td className="py-1.5">{c.w.name}{c.w.phone ? <span className="text-xs" style={{ color: "#8A8370" }}> · {c.w.phone}</span> : null}</td>
+              <td>{canEdit ? <select value={c.w.gradeId} onChange={(e) => maj(c.w.id, (r) => ({ ...r, gradeId: e.target.value }))} className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{grades.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select> : nomGrade(c.w.gradeId)}</td>
+              <td className="text-right tabular">{fmt(tauxGrade(c.w.gradeId))}</td>
+              <td className="text-xs">{ecDateFr(c.start)} → {c.end ? ecDateFr(c.end) : "en cours"}</td>
+              <td className="text-right tabular">{joursOuv(c.w.id, "", "", x.id)}</td><td className="text-right tabular">{fmt(brutOuv(c.w.id, "", "", x.id))}</td>
+              <td>{c.w.employeeId ? ecPastille("Lié", "ok") : canEdit ? <button onClick={() => lierRH(c.w)} className="text-xs underline" data-testid="bt-cr-lier">Lier à Salaires</button> : "—"}</td>
+              <td className="text-right whitespace-nowrap">{canEdit && (!c.end || c.end > today) && <button onClick={() => maj(x.id, (r) => ({ ...r, crew: r.crew.map((y) => (y.id === c.id ? { ...y, end: today } : y)) }))} className="text-xs mr-2" data-testid="bt-cr-terminer">Terminer</button>}{canEdit && <button onClick={() => { if (joursOuv(c.w.id, "", "", x.id) > 0) { showToast("Cet ouvrier a des jours pointés sur ce chantier : terminez son affectation plutôt que de la retirer."); return; } maj(x.id, (r) => ({ ...r, crew: r.crew.filter((y) => y.id !== c.id) })); }} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-cr-retirer">Retirer</button>}</td></tr>))}</tbody>
+            {crew.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-cr-total"><td colSpan={4}>{crew.length} affectation{crew.length > 1 ? "s" : ""}</td><td className="text-right tabular">{btR2(crew.reduce((t, c) => t + joursOuv(c.w.id, "", "", x.id), 0))}</td><td className="text-right tabular">{fmt(coutPointe(x.id))}</td><td colSpan={2}></td></tr></tfoot>}</table></div>
+          {crew.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun ouvrier affecté. Définissez d'abord la grille salariale, puis affectez vos ouvriers.</div>}
+        </div>)}
+
+        {mosub === "pointage" && (<div data-testid="bt-pointage">
+          <div className="flex flex-wrap gap-3 items-end mb-3"><div>{lab("Jour pointé")}<input type="date" max={today} value={ptDate} onChange={(e) => setPtDate(e.target.value)} data-testid="bt-pt-date" className={ecInput} style={ecBorder} /></div>
+            {canEdit && actifs.length > 0 && <button onClick={() => actifs.forEach((c) => pointer(x, c.w, 1))} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-pt-tous">Tous présents</button>}</div>
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Ouvrier</th><th>Qualification</th><th>Présence</th><th className="text-right">Coût du jour</th></tr></thead>
+            <tbody>{actifs.map((c) => { const p = pts.find((y) => y.siteId === x.id && y.workerId === c.w.id && y.date === ptDate); return (<tr key={c.id} data-testid="bt-pt-ligne"><td className="py-1.5">{c.w.name}</td><td className="text-xs">{nomGrade(c.w.gradeId)}</td>
+              <td>{canEdit ? <select value={p ? String(p.units) : "0"} onChange={(e) => pointer(x, c.w, Number(e.target.value))} data-testid="bt-pt-presence" className="border rounded px-1 py-0.5 text-xs" style={ecBorder}><option value="0">Absent</option><option value="1">Présent (journée)</option><option value="0.5">Demi-journée</option></select> : p ? p.units : 0}</td>
+              <td className="text-right tabular">{p ? fmt(btR2(p.units * p.rate)) : "—"}</td></tr>); })}</tbody>
+            {actifs.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-pt-total"><td colSpan={2}>{btR2(pts.filter((p) => p.siteId === x.id && p.date === ptDate).reduce((t, p) => t + p.units, 0))} jour(s)-homme</td><td></td><td className="text-right tabular" data-testid="bt-pt-cout-jour">{fmt(btR2(pts.filter((p) => p.siteId === x.id && p.date === ptDate).reduce((t, p) => t + p.units * p.rate, 0)))}</td></tr></tfoot>}</table></div>
+          {actifs.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun ouvrier affecté à cette date.</div>}
+        </div>)}
+
+        {mosub === "paie" && (<div data-testid="bt-paie">
+          <div className="text-xs mb-2" style={{ color: "#7A7460" }}>Choisissez la période à payer. Pour un ouvrier lié à Salaires, « Préparer » met son salaire de base au montant des jours pointés ; vous émettez ensuite le bulletin dans <b>Salaires → Bulletins de paie</b> (cotisations et retenues comprises). Un ouvrier non lié se paie par une dépense « Main-d'œuvre » (onglet Dépenses). N'enregistrez pas le même salaire des deux façons.</div>
+          <div className="flex flex-wrap gap-3 items-end mb-3"><div>{lab("Du")}<input type="date" value={payFrom} onChange={(e) => setPayFrom(e.target.value)} data-testid="bt-pa-du" className={ecInput} style={ecBorder} /></div><div>{lab("Au")}<input type="date" value={payTo} onChange={(e) => setPayTo(e.target.value)} data-testid="bt-pa-au" className={ecInput} style={ecBorder} /></div></div>
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Ouvrier</th><th className="text-right">Jours (tous chantiers)</th><th className="text-right">Dont ce chantier</th><th className="text-right">Salaire brut de la période</th><th>Bulletins émis sur la période</th><th>Salaires</th><th></th></tr></thead>
+            <tbody>{crew.map((c) => { const j = joursOuv(c.w.id, payFrom, payTo), jh = joursOuv(c.w.id, payFrom, payTo, x.id), brut = brutOuv(c.w.id, payFrom, payTo); const bul = (payslips || []).filter((ps) => ps.status !== "annulé" && c.w.employeeId && String(ps.employeeId) === String(c.w.employeeId) && ps.periodStart <= payTo && ps.periodEnd >= payFrom); return (<tr key={c.id} data-testid="bt-pa-ligne"><td className="py-1.5">{c.w.name}</td><td className="text-right tabular">{j}</td><td className="text-right tabular">{jh}</td><td className="text-right tabular" data-testid="bt-pa-brut">{fmt(brut)}</td>
+              <td className="text-xs">{bul.length ? bul.length + " bulletin(s), net " + fmt(btR2(bul.reduce((t, b) => t + (Number(b.netTotal) || 0), 0))) : "—"}</td>
+              <td>{c.w.employeeId ? ecPastille("Lié", "ok") : <span className="text-xs" style={{ color: "#8A8370" }}>Non lié</span>}</td>
+              <td className="text-right">{canEdit && c.w.employeeId && <button onClick={() => preparerSalaire(c.w, brut)} className="text-xs underline" data-testid="bt-pa-preparer">Préparer dans Salaires</button>}</td></tr>); })}</tbody>
+            {crew.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td>Total</td><td colSpan={2}></td><td className="text-right tabular" data-testid="bt-pa-tot">{fmt(btR2(crew.reduce((t, c) => t + brutOuv(c.w.id, payFrom, payTo), 0)))}</td><td colSpan={3}></td></tr></tfoot>}</table></div>
+          {crew.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun ouvrier affecté à ce chantier.</div>}
+          {sal > 0 && <div className="text-xs mt-3" style={{ color: "#5B563F" }} data-testid="bt-pa-sal">Salaires déjà versés via Salaires et affectés à ce chantier (au prorata des jours pointés) : <b className="tabular">{fmt(sal)}</b> — comptés dans les dépenses de main-d'œuvre du chantier.</div>}
+        </div>)}
+      </div>
+    );
+  };
 
   const VueSite = (x) => {
     const phys = avPhys(x), fact = avFact(x), temps = tempsPct(x), bud = budgetTotal(x), dep = depensesDe(x.id);
@@ -458,7 +655,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={s.end || ""} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, end: e.target.value }))} className={ecInput} style={ecBorder} /></div>
           </div>
           <div className="flex flex-wrap gap-1 mb-4" style={{ borderBottom: "1px solid #E4DDC8", paddingBottom: 8 }}>
-            {[["vue", "Vue d'ensemble"], ["etapes", "Étapes d'exécution"], ["budget", "Budget d'exécution"], ["equipe", "Encadrement et tâches"], ["marche", "Marché, avances et retenue"]].map(([id, l]) => (<button key={id} onClick={() => setSub(id)} data-testid={"bt-sub-" + id} className="px-3 py-1.5 text-sm rounded-lg" style={{ background: sub === id ? "#E6F1EE" : "transparent", color: sub === id ? "#152238" : "#6B6552", fontWeight: sub === id ? 600 : 500, border: "1px solid " + (sub === id ? "#0F6B5C" : "#E4DDC8") }}>{l}</button>))}
+            {[["vue", "Vue d'ensemble"], ["etapes", "Étapes d'exécution"], ["budget", "Budget d'exécution"], ["equipe", "Encadrement et tâches"], ["mo", "Main-d'œuvre"], ["marche", "Marché, avances et retenue"]].map(([id, l]) => (<button key={id} onClick={() => setSub(id)} data-testid={"bt-sub-" + id} className="px-3 py-1.5 text-sm rounded-lg" style={{ background: sub === id ? "#E6F1EE" : "transparent", color: sub === id ? "#152238" : "#6B6552", fontWeight: sub === id ? 600 : 500, border: "1px solid " + (sub === id ? "#0F6B5C" : "#E4DDC8") }}>{l}</button>))}
           </div>
           {sub === "vue" && VueSite(s)}
           {sub === "etapes" && EtapesSite(s)}
@@ -476,6 +673,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
           </div>)}
           {TachesSite(s)}
           </div>)}
+          {sub === "mo" && MoSite(s)}
           {sub === "marche" && (<div>
           <div className="grid md:grid-cols-3 gap-2 mb-4 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Retenue de garantie (%)</label><input type="number" min="0" max="30" step="0.5" value={s.retPct || ""} disabled={!canEdit || sitsDe(s.id).length > 0} onChange={(e) => maj(s.id, (r) => ({ ...r, retPct: Math.min(30, Math.max(0, Number(e.target.value) || 0)) }))} className={ecInput + " tabular"} style={ecBorder} /></div>

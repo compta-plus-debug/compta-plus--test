@@ -2922,7 +2922,7 @@ function App() {
           <RestoModule resto={resto} setResto={setResto} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} products={products} setProducts={setProducts} movements={movements} setMovements={setMovements} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "btp" && btpActif && (
-          <BtpModule btp={btp} setBtp={setBtp} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
+          <BtpModule btp={btp} setBtp={setBtp} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} employees={employees} setEmployees={setEmployees} payslips={payslips} />
         )}
         {active === "immo" && immoActif && (
           <ImmobilierModule immo={immo} setImmo={setImmo} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
