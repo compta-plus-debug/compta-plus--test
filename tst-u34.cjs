@@ -66,6 +66,11 @@ const data=[
  await g(p,'tr-apercu-fermer').click();await p.waitForTimeout(250);
  // factures : TCA, facturation groupée
  await tab(p,'factures');
+ // client dont les voyages ne sont pas encore livrés : explication et passage à « Livré » depuis cet écran
+ await g(p,'tr-fact-client').selectOption('c2');await p.waitForTimeout(300);
+ ok('client sans voyage livré : message clair, bouton grisé, voyages listés',(await g(p,'tr-fact-aucun').count())===1&&(await g(p,'tr-fact-emettre').isDisabled())&&(await g(p,'tr-fact-voyage-ligne').count())===2,[await g(p,'tr-fact-aucun').count(),await g(p,'tr-fact-voyage-ligne').count()]);
+ await g(p,'tr-fact-voyage-etat').first().selectOption('livre');await p.waitForTimeout(400);
+ ok('après « Livré » : 1 voyage à facturer et bouton actif',(await t('tr-fact-nb')).trim()==='1'&&!(await g(p,'tr-fact-emettre').isDisabled()),await t('tr-fact-nb'));
  await g(p,'tr-tca').check();await p.waitForTimeout(400);
  await g(p,'tr-fact-client').selectOption('c1');await p.waitForTimeout(250);
  ok('client 1 : 2 voyages livrés, 8 000',(await t('tr-fact-nb')).trim()==='2'&&re('8','000').test(await t('tr-fact-montant')),[await t('tr-fact-nb'),await t('tr-fact-montant')]);
