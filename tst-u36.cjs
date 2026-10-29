@@ -202,9 +202,9 @@ const data=[
  ok('frise affichée et étape non terminée dépassée = en retard',(await g(p,'bt-frise').count())===1&&/retard/i.test(await g(p,'bt-phase-etat').first().innerText()),await g(p,'bt-phase-etat').first().innerText());
  await g(p,'bt-ph-nom').fill('Fondations');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(250);
  ok('étape en double refusée',(await g(p,'bt-phase-ligne').count())===2);
- await g(p,'bt-phase-pct').first().fill('100');await p.waitForTimeout(300);
+ await g(p,'bt-phase-pct').first().fill('100');await g(p,'bt-phase-pct').first().blur();await p.waitForTimeout(300);
  ok('étape à 100 % : terminée',/Termin/.test(await g(p,'bt-phase-etat').first().innerText()),await g(p,'bt-phase-etat').first().innerText());
- await g(p,'bt-phase-pct').nth(1).fill('50');await p.waitForTimeout(300);
+ await g(p,'bt-phase-pct').nth(1).fill('50');await g(p,'bt-phase-pct').nth(1).blur();await p.waitForTimeout(300);
  ok('avancement physique pondéré = 80 %',/80/.test(await t('bt-et-phys')),await t('bt-et-phys'));
  await g(p,'bt-ph-nom').fill('Finitions');await g(p,'bt-ph-poids').fill('10');await g(p,'bt-ph-debut').fill('');await g(p,'bt-ph-fin').fill('');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(300);
  ok('total des poids 110 : alerte affichée',(await g(p,'bt-et-poids-alerte').count())===1);
@@ -212,7 +212,7 @@ const data=[
  await sub(p,'vue');
  ok('vue d\'ensemble : avancement physique 80 %',/80/.test(await t('bt-vue-phys')),await t('bt-vue-phys'));
  await sub(p,'budget');
- await g(p,'bt-bud-materiaux').fill('20000');await g(p,'bt-bud-maindoeuvre').fill('10000');await p.waitForTimeout(300);
+ await g(p,'bt-bud-materiaux').fill('20000');await g(p,'bt-bud-materiaux').blur();await g(p,'bt-bud-maindoeuvre').fill('10000');await g(p,'bt-bud-maindoeuvre').blur();await p.waitForTimeout(300);
  ok('budget d\'exécution par nature : total 30 000',re('30','000').test(await t('bt-bud-tot-budget')),await t('bt-bud-tot-budget'));
  ok('budget : 6 natures',(await g(p,'bt-bud-ligne').count())===6);
  await sub(p,'equipe');
@@ -230,6 +230,34 @@ const data=[
  await p.waitForTimeout(300);await sub(p,'equipe');
  await g(p,'bt-tache-etat').first().selectOption('fait');await p.waitForTimeout(300);
  ok('tâche faite : plus en retard',!/retard/i.test(await g(p,'bt-tache-ligne').innerText())&&/1 faite/.test(await t('bt-tache-total')),await t('bt-tache-total'));
+ // v298 : flèches déroulantes, boutons Enregistrer, explication des poids, suivi du marché
+ await sub(p,'equipe');
+ ok('flèche déroulante des tâches : liste de tâches types',(await g(p,'bt-fleche-tache').locator('option').count())>=5,await g(p,'bt-fleche-tache').locator('option').count());
+ await g(p,'bt-fleche-tache').selectOption({index:2});await p.waitForTimeout(250);
+ ok('choix dans la liste : la case Tâche est remplie',(await g(p,'bt-tache-titre').inputValue()).length>5,await g(p,'bt-tache-titre').inputValue());
+ await g(p,'bt-fleche-role').selectOption({index:2});await p.waitForTimeout(250);
+ ok('flèche déroulante des fonctions : la case est remplie',(await g(p,'bt-staff-role').inputValue()).length>3,await g(p,'bt-staff-role').inputValue());
+ await sub(p,'etapes');
+ ok('explication des poids avec exemple',(await g(p,'bt-et-aide').count())===1&&/50 %/.test(await g(p,'bt-et-aide').textContent()));
+ await g(p,'bt-ph-nom').fill('Étape A');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(250);
+ await g(p,'bt-ph-nom').fill('Étape B');await g(p,'bt-ph-ajouter').click();await p.waitForTimeout(250);
+ await g(p,'bt-ph-egal').click();await p.waitForTimeout(350);
+ ok('poids répartis également : total 100',(await g(p,'bt-phase-tot-poids').innerText()).trim()==='100',await g(p,'bt-phase-tot-poids').innerText());
+ await g(p,'bt-fleche-etape').selectOption({index:1});await p.waitForTimeout(250);
+ ok('flèche des étapes : la case est remplie',(await g(p,'bt-ph-nom').inputValue()).length>3,await g(p,'bt-ph-nom').inputValue());
+ await g(p,'bt-et-enregistrer').click();await p.waitForTimeout(300);
+ ok('bouton Enregistrer les étapes : confirmation',/Étapes enregistrées/.test(await p.locator('body').innerText()));
+ await sub(p,'budget');await g(p,'bt-bud-enregistrer').click();await p.waitForTimeout(300);
+ ok('bouton Enregistrer le budget : confirmation avec total',/Budget d'exécution enregistré/.test(await p.locator('body').innerText()));
+ await sub(p,'marche');
+ ok('suivi du marché : marché 70 000 affiché',re('70','000').test(await g(p,'bt-sm-marche').innerText()),await g(p,'bt-sm-marche').innerText());
+ await g(p,'bt-marche-enregistrer').click();await p.waitForTimeout(300);
+ ok('bouton Enregistrer le marché : confirmation',/Marché enregistré/.test(await p.locator('body').innerText()));
+ await g(p,'bt-sm-emettre').click();await p.waitForTimeout(450);
+ ok('Émettre une situation : ouvre l\'onglet Situations sur ce chantier',(await g(p,'bt-situation-bloc').count())===1&&(await g(p,'bt-sit-chantier').inputValue())==='s1',await g(p,'bt-sit-chantier').inputValue().catch(()=>''));
+ await tab(p,'chantiers');
+ if((await g(p,'bt-ch-detail').count())===0)await p.locator('[data-testid="bt-ch-ligne"]:has-text("Villa") [data-testid="bt-ch-ouvrir"]').click();
+ await p.waitForTimeout(300);await sub(p,'marche');
  await tab(p,'situations');
  // petit écran
  await g(p,'bt-sit-filtre-etat').selectOption('');
