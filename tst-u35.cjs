@@ -54,7 +54,9 @@ const data=[
  // bail
  await tab(p,'baux');
  const opts=await p.locator('[data-testid="im-bail-bien"] option').evaluateAll(e=>e.map(x=>x.innerText));
- ok('seul le bien libre est proposé',opts.length===2&&/Studio 5/.test(opts[1]),opts);
+ const dis=await p.locator('[data-testid="im-bail-bien"] option').evaluateAll(e=>e.map(x=>x.disabled));
+ ok('tous les biens listés : occupés grisés avec le locataire, seul le libre est choisissable',opts.length===4&&dis.join()==='false,true,true,false'&&/loué à Marie/.test(opts[1])&&/Studio 5/.test(opts[3]),[opts,dis]);
+ ok('pas de message « aucun bien libre » quand un bien est libre',(await g(p,'im-bail-aucun-libre').count())===0);
  await g(p,'im-bail-bien').selectOption('p3');await g(p,'im-bail-locataire').selectOption('t2');await g(p,'im-bail-loyer').fill('5000');await g(p,'im-bail-jour').selectOption('28');await g(p,'im-bail-depot').fill('5000');await g(p,'im-bail-creer').click();await p.waitForTimeout(500);
  ok('bail créé et ouvert',(await g(p,'im-bail-ligne').count())===3&&(await g(p,'im-bail-detail').count())===1&&/BA-\d{4}-0003/.test(await g(p,'im-bail-detail').innerText()));
  // dépôt de garantie
@@ -158,6 +160,12 @@ const data=[
  await p.setViewportSize({width:390,height:800});
  for(const id of ['apercu','biens','locataires','baux','loyers','depenses','rapports']){await tab(p,id);const w=await p.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);ok('390 px sans débordement : '+id,w<=2,w);}
  ok('aucune erreur JS',errs.length===0,errs);await p.close();}
+// tous les biens loués : liste grisée et message explicatif
+{const tous=data.map(x=>x.id==='p3'?x:x);const occ=data.concat([{type:'lease',id:'b3',number:'BA-'+an+'-0003',propertyId:'p3',tenantId:'t2',start:jours(-5),end:'',rent:5000,charges:0,dueDay:5,deposit:0,depositStatus:'',status:'actif'}]);
+ const {p}=await boot(b,{settings:{companyName:'Immo Test',currency:'HTG'},primary:true,cats:{immo:occ},pageInit:mk('Administrateur')});await p.waitForTimeout(1200);
+ await tab(p,'baux');
+ const dis=await p.locator('[data-testid="im-bail-bien"] option').evaluateAll(e=>e.map(x=>x.disabled));
+ ok('tous loués : options grisées et message explicatif',dis.slice(1).every(Boolean)&&(await g(p,'im-bail-aucun-libre').count())===1&&/Mettre fin/.test(await g(p,'im-bail-aucun-libre').innerText()),dis);await p.close();}
 // accueil (Vendeur)
 {const {p}=await boot(b,{settings:{companyName:'Immo Test',currency:'HTG'},primary:true,cats:{immo:data},pageInit:mk('Vendeur')});await p.waitForTimeout(1200);
  const tabs=await p.locator('[data-testid^="im-tab-"]').evaluateAll(e=>e.map(x=>x.innerText));
