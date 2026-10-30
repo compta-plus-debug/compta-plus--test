@@ -67,4 +67,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 60-ecoles-socle | 41 | — | 51-ecoles, 52-ecoles-suite, 53-import-export, 54-sante, 58-restauration, 59-hotellerie, 61-transport, 62-immobilier, 63-btp |
 | 61-transport | 641 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 62-immobilier | 699 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 63-btp | 1218 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 63-btp | 1553 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
