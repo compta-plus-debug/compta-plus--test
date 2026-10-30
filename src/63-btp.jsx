@@ -238,6 +238,35 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const [fs, setFs] = useBrouillon("btp-chantier", { name: "", clientId: "", address: "", start: todayStr(), end: "", retPct: "", budget: "", lead: "" });
   const [sq, setSq] = useState(""); const [sst, setSst] = useState("");
   const [fl, setFl] = useState({ label: "", unit: "", qty: "", pu: "" });
+  const [edS, setEdS] = useState(null); // brouillon de modification du dossier de chantier
+  const ouvrirModif = (x) => setEdS({ id: x.id, name: x.name, clientId: x.clientId, address: x.address || "", start: x.start || "", end: x.end || "", retPct: x.retPct || "" });
+  const enregistrerModif = (x) => {
+    if (!canEdit || !edS) return;
+    const name = edS.name.trim();
+    if (!name) { showToast("Indiquez le nom du chantier."); return; }
+    if (!edS.clientId) { showToast("Choisissez le client."); return; }
+    if (sites.some((y) => y.id !== x.id && btNom(y.name) === btNom(name))) { showToast("Un autre chantier porte déjà ce nom."); return; }
+    if (!edS.start) { showToast("Indiquez la date de début."); return; }
+    if (edS.end && edS.end < edS.start) { showToast("La date de fin prévue doit être après le début."); return; }
+    const ret = Number(edS.retPct) || 0;
+    if (ret < 0 || ret > 30) { showToast("La retenue de garantie doit être comprise entre 0 et 30 %."); return; }
+    if (ret !== (Number(x.retPct) || 0) && sitsDe(x.id).length > 0) { showToast("La retenue de garantie ne peut plus changer : des situations de travaux ont déjà été émises."); return; }
+    const datees = [...(x.avances || []).map((a) => a.date), ...deps.filter((d) => d.siteId === x.id).map((d) => d.date), ...sits.filter((y) => y.siteId === x.id).map((y) => y.date), ...pts.filter((q) => q.siteId === x.id).map((q) => q.date)].filter(Boolean).sort();
+    if (datees.length && edS.start > datees[0]) { showToast("Des opérations de ce chantier sont datées du " + ecDateFr(datees[0]) + " : le début ne peut pas être plus tardif."); return; }
+    maj(x.id, (r) => ({ ...r, name, clientId: edS.clientId, address: edS.address.trim(), start: edS.start, end: edS.end, retPct: ret }));
+    logAudit("BTP", "Dossier de chantier modifié", x.number + " — " + name);
+    showToast("Dossier du chantier enregistré.");
+    setEdS(null);
+  };
+  const majLigne = (s, l, patch) => {
+    if (!canEdit) return;
+    const verrou = sitsDe(s.id).length > 0;
+    if ("label" in patch && !String(patch.label).trim()) { showToast("La désignation ne peut pas être vide."); return; }
+    if (("qty" in patch || "pu" in patch) && verrou) { showToast("Quantités et prix ne peuvent plus changer : des situations de travaux ont déjà été émises."); return; }
+    if ("qty" in patch && !(patch.qty > 0)) { showToast("La quantité doit être supérieure à zéro."); return; }
+    if ("pu" in patch && !(patch.pu >= 0)) { showToast("Le prix unitaire doit être positif ou nul."); return; }
+    maj(s.id, (r) => ({ ...r, lines: r.lines.map((x) => (x.id === l.id ? { ...x, ...patch } : x)) }));
+  };
   const [fst, setFst] = useState({ name: "", role: "", phone: "" });
   const respDe = (x) => { const st = x.staff || []; const r = st.find((m) => /chef de chantier/i.test(m.role)) || st.find((m) => /conducteur/i.test(m.role)) || st[0]; return r ? r.name : "—"; };
   const ajouterEncadrant = (s) => {
@@ -971,12 +1000,27 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
         <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">N°</th><th>Chantier</th><th>Client</th><th>Responsable</th><th className="text-right">Marché</th><th className="text-right">Avancement</th><th className="text-right">Facturé (HT)</th><th className="text-right">Dépenses</th><th>État</th><th></th></tr></thead>
           <tbody>{sF.map((x) => (<tr key={x.id} data-testid="bt-ch-ligne" style={{ background: x.id === selSite ? "#E6F1EE" : undefined }}><td className="py-1.5 tabular text-xs">{x.number}</td><td className="font-semibold">{x.name}</td><td>{nomClient(x.clientId)}</td><td className="text-xs" data-testid="bt-ch-resp">{respDe(x)}</td><td className="text-right tabular">{fmt(btMarche(x))}</td><td className="text-right tabular">{avanc(x)} %</td><td className="text-right tabular">{fmt(factureHt(x.id))}</td><td className="text-right tabular">{fmt(depensesDe(x.id))}</td>
             <td>{x.status === "termine" ? ecPastille("Terminé", "ok") : x.status === "suspendu" ? ecPastille("Suspendu", "alerte") : x.status === "preparation" ? ecPastille("En préparation", "neutre") : ecPastille("En cours", "attente")}</td>
-            <td className="text-right whitespace-nowrap"><button onClick={() => { setSelSite(x.id === selSite ? "" : x.id); setSub("vue"); }} className="text-xs underline" data-testid="bt-ch-ouvrir">{x.id === selSite ? "Fermer" : "Ouvrir"}</button></td></tr>))}</tbody>
+            <td className="text-right whitespace-nowrap"><button onClick={() => { setSelSite(x.id === selSite ? "" : x.id); setSub("vue"); setEdS(null); }} className="text-xs underline" data-testid="bt-ch-ouvrir">{x.id === selSite ? "Fermer" : "Ouvrir"}</button></td></tr>))}</tbody>
           {sF.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-ch-total-ligne"><td colSpan={4}>Total ({sF.length} chantier{sF.length > 1 ? "s" : ""})</td><td className="text-right tabular" data-testid="bt-ch-tot-marche">{fmt(btR2(sF.reduce((t, x) => t + btMarche(x), 0)))}</td><td></td><td className="text-right tabular" data-testid="bt-ch-tot-fact">{fmt(btR2(sF.reduce((t, x) => t + factureHt(x.id), 0)))}</td><td className="text-right tabular" data-testid="bt-ch-tot-dep">{fmt(btR2(sF.reduce((t, x) => t + depensesDe(x.id), 0)))}</td><td colSpan={2}></td></tr></tfoot>}</table></div>
         {sF.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>{sites.length === 0 ? "Aucun chantier." : "Aucun chantier ne correspond à ces filtres."}</div>}
         {s && (<div className="ec-card p-4 mt-5" data-testid="bt-ch-detail">
           <div className="display text-lg mb-1" style={{ color: "#152238" }}>{s.number} — {s.name}</div>
           <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Client : {nomClient(s.clientId)}{s.address ? " · " + s.address : ""} · du {ecDateFr(s.start)}{s.end ? " au " + ecDateFr(s.end) : ""}</div>
+          {canEdit && !edS && <div className="mb-3"><button onClick={() => ouvrirModif(s)} className="px-3 py-1.5 rounded text-sm" style={ecBtn} data-testid="bt-ch-modifier">Modifier le dossier</button></div>}
+          {canEdit && edS && edS.id === s.id && (<div className="ec-card p-3 mb-3" data-testid="bt-md-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Modifier le dossier {s.number}</div>
+            <div className="grid md:grid-cols-4 gap-2 items-end">
+              <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom du chantier</label><input value={edS.name} onChange={(e) => setEdS({ ...edS, name: e.target.value })} data-testid="bt-md-nom" className={ecInput} style={ecBorder} /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Client</label><select value={edS.clientId} onChange={(e) => setEdS({ ...edS, clientId: e.target.value })} data-testid="bt-md-client" className={ecInput} style={ecBorder}>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Adresse du chantier</label><input value={edS.address} onChange={(e) => setEdS({ ...edS, address: e.target.value })} data-testid="bt-md-adresse" className={ecInput} style={ecBorder} /></div>
+            </div>
+            <div className="grid md:grid-cols-4 gap-2 items-end mt-2">
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Début</label><input type="date" value={edS.start} onChange={(e) => setEdS({ ...edS, start: e.target.value })} data-testid="bt-md-debut" className={ecInput} style={ecBorder} /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={edS.end} onChange={(e) => setEdS({ ...edS, end: e.target.value })} data-testid="bt-md-fin" className={ecInput} style={ecBorder} /></div>
+              <div><label className="text-xs" style={{ color: "#8A8370" }}>Retenue de garantie (%)</label><input type="number" min="0" max="30" step="0.5" value={edS.retPct} disabled={sitsDe(s.id).length > 0} onChange={(e) => setEdS({ ...edS, retPct: e.target.value })} data-testid="bt-md-retenue" className={ecInput + " tabular"} style={ecBorder} /></div>
+            </div>
+            {sitsDe(s.id).length > 0 && <div className="text-xs mt-1" style={{ color: "#7A7460" }}>La retenue de garantie est figée : des situations ont déjà été émises.</div>}
+            <div className="flex flex-wrap gap-2 mt-3"><button onClick={() => enregistrerModif(s)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-md-enregistrer">Enregistrer les modifications</button><button onClick={() => setEdS(null)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-md-annuler">Annuler</button></div>
+          </div>)}
           <div className="grid md:grid-cols-4 gap-2 mb-3 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>État du chantier</label><select value={s.status} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, status: e.target.value }))} data-testid="bt-ch-etat" className={ecInput} style={ecBorder}>{BT_ETATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={s.end || ""} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, end: e.target.value }))} className={ecInput} style={ecBorder} /></div>
@@ -1025,7 +1069,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
           </div>
           <div className="flex items-center justify-between mb-2 gap-2 flex-wrap"><div className="display text-base" style={{ color: "#152238" }}>Bordereau de prix (devis)</div><button onClick={() => setImprimer({ kind: "devis", id: s.id })} className="text-xs underline" data-testid="bt-ch-devis">Imprimer le devis</button></div>
           <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Désignation</th><th>Unité</th><th className="text-right">Quantité</th><th className="text-right">Prix unitaire</th><th className="text-right">Montant</th><th></th></tr></thead>
-            <tbody>{(s.lines || []).map((l) => (<tr key={l.id} data-testid="bt-ligne"><td className="py-1.5">{l.label}</td><td>{l.unit || "—"}</td><td className="text-right tabular">{l.qty}</td><td className="text-right tabular">{fmt(l.pu)}</td><td className="text-right tabular">{fmt(btR2(l.qty * l.pu))}</td><td className="text-right">{canEdit && sitsDe(s.id).length === 0 && <button onClick={() => retirerLigne(s, l)} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-ligne-retirer">Retirer</button>}</td></tr>))}</tbody>
+            <tbody>{(s.lines || []).map((l) => (<tr key={l.id} data-testid="bt-ligne"><td className="py-1.5">{canEdit ? <BtChamp value={l.label} onCommit={(v) => majLigne(s, l, { label: String(v).trim() })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-label" className="border rounded px-1 py-0.5 text-sm" style={{ ...ecBorder, width: "100%", minWidth: 120 }} /> : l.label}</td><td>{canEdit ? <BtChamp value={l.unit || ""} onCommit={(v) => majLigne(s, l, { unit: String(v).trim() })} onSaved={() => showToast("Enregistré ✓")} className="border rounded px-1 py-0.5 text-xs" style={{ ...ecBorder, width: 70 }} /> : (l.unit || "—")}</td><td className="text-right tabular">{canEdit && sitsDe(s.id).length === 0 ? <BtChamp type="number" min="0" step="0.01" value={l.qty} onCommit={(v) => majLigne(s, l, { qty: btQ(v) })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-qte" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 80 }} /> : l.qty}</td><td className="text-right tabular">{canEdit && sitsDe(s.id).length === 0 ? <BtChamp type="number" min="0" value={l.pu} onCommit={(v) => majLigne(s, l, { pu: btR2(v) })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-pu" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 100 }} /> : fmt(l.pu)}</td><td className="text-right tabular">{fmt(btR2(l.qty * l.pu))}</td><td className="text-right">{canEdit && sitsDe(s.id).length === 0 && <button onClick={() => retirerLigne(s, l)} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-ligne-retirer">Retirer</button>}</td></tr>))}</tbody>
             {(s.lines || []).length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={4}>Total du marché (hors taxe)</td><td className="text-right tabular" data-testid="bt-marche">{fmt(btMarche(s))}</td><td></td></tr></tfoot>}</table></div>
           {(s.lines || []).length === 0 && <div className="text-sm mb-2" style={{ color: "#8A8370" }}>Aucune ligne : ajoutez les travaux du marché ci-dessous.</div>}
           {canEdit && (<div className="grid md:grid-cols-5 gap-2 mt-2 items-end">
