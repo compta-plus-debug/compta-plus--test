@@ -2,7 +2,7 @@
 // @module Gestion module
 // @depends ACCOUNTING_ONLY_HIDDEN_GESTION_TABS, BzAcomptes, BzAvoirs, BzBudget, BzDocs, BzEcheances
 //   BzImportPos, BzInventaire, BzJustificatifs, BzPilotage, BzRapportBanque, BzRecurrent
-//   BzReprise, bzAlerts, todayStr, useState
+//   BzReprise, bzAlerts, rangModule, todayStr, useState
 // @exports GestionModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // ---------------------------------------------------------------- Module principal
@@ -20,7 +20,7 @@ function GestionModule(props) {
   return (
     <div className="p-3 sm:p-4 md:p-8 max-w-6xl min-w-0" style={{ overflowX: "hidden" }} data-bz-module="gestion">
       <header className="mb-4">
-        <div className="text-xs uppercase tracking-widest" style={{ color: "#C9A24B" }}>Module 10</div>
+        <div className="text-xs uppercase tracking-widest" style={{ color: "#C9A24B" }}>Module {rangModule("gestion")}</div>
         <div className="display text-3xl" style={{ color: "#152238" }}>Gestion avancée</div>
         {!premium && <div className="text-xs mt-1" style={{ color: "#A39C87" }}>Récurrence, projets, budget, prévisionnel et pilotage sont réservés aux forfaits Assisté et Extension.</div>}
       </header>

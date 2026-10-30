@@ -5,7 +5,7 @@
 // @exports ACCOUNTING_ONLY_HIDDEN_GESTION_TABS, ASSET_CATEGORIES, CURRENCIES, CURRENT_CURRENCY
 //   DEFAULT_ACCOUNTS, DEFAULT_CLIENTS, DEFAULT_PRODUCTS, DEFAULT_SETTINGS, DEFAULT_SUPPLIERS
 //   DEFAULT_USERS, MODULES, ROLE_MODULE_ACCESS, TAX_SYSTEMS, VENDEUR_WRITABLE_CATEGORIES
-//   __uidCounter, allowedModulesFor, isLocked, roleLabel
+//   __uidCounter, allowedModulesFor, isLocked, rangModule, roleLabel
 // ═══ FIN DE L'EN-TÊTE ═══
 const MODULES = [
   { id: "compta", n: 1, label: "Comptabilité", icon: BookOpen, ready: true },
@@ -28,6 +28,10 @@ const MODULES = [
   { id: "impex", n: 12, label: "Import-export", icon: Truck, ready: true }, // bloc par secteur : visible seulement si le secteur « Import-export » est actif et l'espace choisi
   { id: "ecole", n: 11, label: "Éducation", icon: BookOpen, ready: true }, // bloc par secteur : visible seulement si le secteur « Écoles » est actif
 ];
+
+// Rang d'un module dans la barre latérale de l'espace en cours (voir window.__rangModules posé par l'application) ;
+// repli sur le numéro historique si l'information n'est pas encore là.
+const rangModule = (id) => (typeof window !== "undefined" && window.__rangModules && window.__rangModules[id]) || ((MODULES.find((m) => m.id === id) || {}).n || "");
 
 // Modules accessibles par rôle. "null" = accès à tous les modules (comportement
 // historique pour Administrateur/Éditeur/Lecture seule). Le rôle "Vendeur" est

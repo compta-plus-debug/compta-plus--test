@@ -3,7 +3,7 @@
 // @depends APP_VERSION, BK_LABELS, CURRENCIES, DEFAULT_ACCOUNTS, DEFAULT_CLIENTS, DEFAULT_PRODUCTS
 //   DEFAULT_SUPPLIERS, GroupedTabNav, NET_MSG, PartialResetPanel, Plus, RestorePreviewModal
 //   TAX_SYSTEMS, bkBalance, bkBuildFile, bkDiff, bkDownload, bkVerify, ecInviteError, fmt
-//   genInviteToken, invoicePrefix, isFutureDate, isLocked, logClientError, resizeImage
+//   genInviteToken, invoicePrefix, isFutureDate, isLocked, logClientError, rangModule, resizeImage
 //   resolveMembership, roleLabel, rpSave, supabase, todayStr, uid, useBackNav, useEffect, useState
 // @exports AdminModule
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -833,7 +833,7 @@ function AdminModule({
   return (
     <div className="p-4 md:p-8 max-w-6xl">
       <header className="mb-6">
-        <div className="text-xs uppercase tracking-widest" style={{ color: "#C9A24B" }}>Module 8</div>
+        <div className="text-xs uppercase tracking-widest" style={{ color: "#C9A24B" }}>Module {rangModule("admin")}</div>
         <div className="display text-3xl" style={{ color: "#152238" }}>Administration et paramètres</div>
       </header>
 
@@ -999,7 +999,7 @@ function AdminModule({
           <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }}>
             <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Système de taxation</div>
             <p className="text-xs mb-4" style={{ color: "#8A8370" }}>
-              Choisissez le régime applicable aux ventes du Module 3. Le taux par défaut s'applique aux nouveaux articles du catalogue (modifiable par article).
+              Choisissez le régime applicable aux ventes du module Vente. Le taux par défaut s'applique aux nouveaux articles du catalogue (modifiable par article).
             </p>
 
             <div className="mb-4">

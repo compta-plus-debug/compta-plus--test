@@ -477,8 +477,15 @@ function App() {
   const ESPACE_HOTEL_MODULES = ["hotel", "caisse", "compta", "achat", "rh", "rapports", "admin", "gestion", "stock"];
   const ESPACE_RESTO_MODULES = ["resto", "caisse", "compta", "achat", "rh", "rapports", "admin", "gestion", "stock"];
   const ESPACE_ECOLE_LIBELLES = { achat: "Dépenses et fournisseurs", rh: "Salaires du personnel" };
+  // Ordre d'importance commun à tous les espaces de métier : le métier, puis l'argent (caisse), les dépenses et fournisseurs,
+  // le stock s'il existe, le personnel, et enfin la comptabilité, les rapports, la gestion avancée et l'administration.
+  const ESPACES_METIER = ["ecole", "sante", "resto", "hotel", "transport", "immo", "btp", "indus"];
+  const ORDRE_METIER = ["caisse", "achat", "stock", "rh", "compta", "rapports", "gestion", "admin"];
+  const ordreEspace = (esp, id) => (id === esp ? -1 : (ORDRE_METIER.indexOf(id) < 0 ? 99 : ORDRE_METIER.indexOf(id)));
   const modulesVisibles = MODULES.filter((m) => (!allowedModuleIds || allowedModuleIds.includes(m.id)) && (m.id !== "ecole" || (ecolesActif && espace === "ecole")) && (m.id !== "impex" || (ieActif && espace === "impex")) && (m.id !== "sante" || (santeActif && espace === "sante")) && (m.id !== "resto" || (restoActif && espace === "resto")) && (m.id !== "hotel" || (hotelActif && espace === "hotel")) && (m.id !== "transport" || (transportActif && espace === "transport")) && (m.id !== "immo" || (immoActif && espace === "immo")) && (m.id !== "btp" || (btpActif && espace === "btp")) && (m.id !== "indus" || (indusActif && espace === "indus")) && (espace !== "indus" || ESPACE_INDUS_MODULES.includes(m.id)) && (espace !== "btp" || ESPACE_BTP_MODULES.includes(m.id)) && (espace !== "immo" || ESPACE_IMMO_MODULES.includes(m.id)) && (espace !== "transport" || ESPACE_TRANSPORT_MODULES.includes(m.id)) && (espace !== "hotel" || ESPACE_HOTEL_MODULES.includes(m.id)) && (espace !== "resto" || ESPACE_RESTO_MODULES.includes(m.id)) && (espace !== "ecole" || ESPACE_ECOLE_MODULES.includes(m.id)) && (espace !== "sante" || ESPACE_SANTE_MODULES.includes(m.id)))
-    .sort((a, b) => (espace === "impex" ? (b.id === "impex") - (a.id === "impex") : espace === "sante" ? (b.id === "sante") - (a.id === "sante") : espace === "resto" ? (b.id === "resto") - (a.id === "resto") : espace === "hotel" ? (b.id === "hotel") - (a.id === "hotel") : espace === "transport" ? (b.id === "transport") - (a.id === "transport") : espace === "immo" ? (b.id === "immo") - (a.id === "immo") : espace === "btp" ? (b.id === "btp") - (a.id === "btp") : espace === "indus" ? (b.id === "indus") - (a.id === "indus") : 0));
+    .sort((a, b) => (espace === "impex" ? (b.id === "impex") - (a.id === "impex") : ESPACES_METIER.includes(espace) ? ordreEspace(espace, a.id) - ordreEspace(espace, b.id) : 0));
+  // Numéros de la barre latérale = rang réel dans l'espace (1, 2, 3…), identique dans l'en-tête de chaque module.
+  if (typeof window !== "undefined") { const rg = {}; modulesVisibles.forEach((m, i) => { rg[m.id] = i + 1; }); window.__rangModules = rg; }
   // Contrôle de cohérence Facturation ↔ Journal calculé ici (niveau App), pas
   // seulement dans le module Comptabilité, pour que l'alerte soit visible dès la
   // connexion quel que soit le module ouvert — l'incident du 14/08 (91 factures
@@ -2539,7 +2546,7 @@ function App() {
                   borderLeft: isActive ? "3px solid #C9A24B" : "3px solid transparent",
                 }}
               >
-                <span className="tabular text-xs w-4" style={{ color: "#6C7A9C" }}>{m.n}</span>
+                <span className="tabular text-xs w-4" style={{ color: "#6C7A9C" }} data-testid={"nav-rang-" + m.id}>{modulesVisibles.findIndex((x) => x.id === m.id) + 1}</span>
                 <Icon size={16} />
                 <span className="flex-1 text-left">{(espace === "ecole" || espace === "sante" || espace === "resto" || espace === "hotel" || espace === "transport" || espace === "immo" || espace === "btp" || espace === "indus") && ESPACE_ECOLE_LIBELLES[m.id] ? ESPACE_ECOLE_LIBELLES[m.id] : m.label}</span>
                 {!m.ready && <Lock size={12} style={{ color: "#4A587A" }} />}
@@ -2808,6 +2815,8 @@ function App() {
         )}
         {active === "achat" && (
           <AchatModule
+            btp={btp}
+            indus={indus}
             cheques={cheques}
             setCheques={setCheques}
             accounts={accounts}
@@ -2927,10 +2936,10 @@ function App() {
           <RestoModule resto={resto} setResto={setResto} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} products={products} setProducts={setProducts} movements={movements} setMovements={setMovements} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "btp" && btpActif && (
-          <BtpModule btp={btp} setBtp={setBtp} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} employees={employees} setEmployees={setEmployees} payslips={payslips} />
+          <BtpModule suppliers={suppliers} btp={btp} setBtp={setBtp} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} employees={employees} setEmployees={setEmployees} payslips={payslips} />
         )}
         {active === "indus" && indusActif && (
-          <IndusModule indus={indus} setIndus={setIndus} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
+          <IndusModule suppliers={suppliers} indus={indus} setIndus={setIndus} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "immo" && immoActif && (
           <ImmobilierModule immo={immo} setImmo={setImmo} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
