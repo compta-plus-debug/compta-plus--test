@@ -69,7 +69,7 @@ const data=[
  ok('fiche : marché 70 000, avance reçue 7 000, retenue à libérer 0',re('70','000').test(await t('bt-marche'))&&re('7','000').test(await t('bt-avance-recue'))&&/^0/.test((await t('bt-retenue-due')).trim()),[await t('bt-marche'),await t('bt-avance-recue'),await t('bt-retenue-due')]);
  await g(p,'bt-lg-label').fill('Carrelage');await g(p,'bt-lg-qte').fill('10');await g(p,'bt-lg-pu').fill('800');await g(p,'bt-lg-ajouter').click();await p.waitForTimeout(350);
  ok('ligne ajoutée : marché 78 000',re('78','000').test(await t('bt-marche')),await t('bt-marche'));
- await p.locator('[data-testid="bt-ligne"]:has-text("Carrelage") [data-testid="bt-ligne-retirer"]').click();await p.waitForTimeout(350);
+ await p.locator('[data-testid="bt-ligne"] >> nth=-1 >> [data-testid="bt-ligne-retirer"]').click();await p.waitForTimeout(350);
  ok('ligne retirée : marché 70 000',re('70','000').test(await t('bt-marche')));
  await g(p,'bt-ch-devis').click();await p.waitForTimeout(400);
  ok('devis imprimable (écran et impression)',(await g(p,'bt-devis-feuille').count())===2&&/DEVIS ESTIMATIF/.test(await g(p,'bt-devis-feuille').first().innerText())&&(await g(p,'bt-devis-feuille').first().innerText()).includes('Maçonnerie'));
