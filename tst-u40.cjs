@@ -137,8 +137,7 @@ const sold=(e,a)=>e.flatMap(x=>x.lines).filter(l=>l.account===a).reduce((s,l)=>s
  await g(p,'in-apercu-fermer').click();await p.waitForTimeout(250);
  // vente au comptoir
  await g(p,'in-vte-produit').selectOption(pain);await g(p,'in-vte-qte').fill('100');await g(p,'in-vte-ajouter-ligne').click();await g(p,'in-vte-emettre').click();await p.waitForTimeout(300);
- ok('vente supérieure au stock refusée',(await g(p,'in-vte-ligne').count())===1);
- await g(p,'in-vte-lignebrouillon').locator('text=Retirer').click();await p.waitForTimeout(200);
+ ok('vente supérieure au stock refusée dès l\'ajout de la ligne',(await g(p,'in-vte-ligne').count())===1&&(await g(p,'in-vte-lignebrouillon').count())===0);
  await g(p,'in-vte-produit').selectOption(pain);await g(p,'in-vte-qte').fill('5');await g(p,'in-vte-ajouter-ligne').click();await p.waitForTimeout(200);
  await g(p,'in-vte-emettre').click();await p.waitForTimeout(450);
  ok('vente comptoir encaissée : 2 factures, 2e soldée',(await g(p,'in-vte-ligne').count())===2&&/Soldée/.test(await g(p,'in-vte-ligne').first().innerText()));
