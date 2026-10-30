@@ -87,6 +87,36 @@ function BtChamp({ value, onCommit, onSaved, ...rest }) {
   return <input {...rest} value={v} onChange={(e) => setV(e.target.value)} onBlur={fin} onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }} />;
 }
 
+// Zone de texte enregistrée quand on la quitte.
+function BtTexte({ value, onCommit, onSaved, ...rest }) {
+  const ext = value === undefined || value === null ? "" : String(value);
+  const [v, setV] = useState(ext);
+  useEffect(() => { setV(ext); }, [ext]);
+  return <textarea {...rest} value={v} onChange={(e) => setV(e.target.value)} onBlur={() => { if (v !== ext) { onCommit(v); if (onSaved) onSaved(); } }} />;
+}
+const BT_METEO = ["Ensoleillé", "Nuageux", "Pluie légère", "Forte pluie", "Vent fort"];
+// Journal de chantier d'un jour : formulaire avec son propre brouillon (remis à zéro à chaque changement de jour).
+function BtJournalForm({ entry, staff, effectif, canEdit, onSave }) {
+  const [d, setD] = useState({ weather: (entry && entry.weather) || "", works: (entry && entry.works) || "", incidents: (entry && entry.incidents) || "", visitors: (entry && entry.visitors) || "", materials: (entry && entry.materials) || "", author: (entry && entry.author) || "" });
+  const lab = (t) => <label className="text-xs" style={{ color: "#8A8370" }}>{t}</label>;
+  return (
+    <div className="ec-card p-3 mb-3" data-testid="bt-jr-form">
+      <div className="grid md:grid-cols-3 gap-2 items-end">
+        <div>{lab("Météo")}<select value={d.weather} onChange={(e) => setD({ ...d, weather: e.target.value })} disabled={!canEdit} data-testid="bt-jr-meteo" className={ecInput} style={ecBorder}><option value="">—</option>{BT_METEO.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
+        <div>{lab("Rédigé par")}<select value={d.author} onChange={(e) => setD({ ...d, author: e.target.value })} disabled={!canEdit} data-testid="bt-jr-auteur" className={ecInput} style={ecBorder}><option value="">—</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name} ({m.role})</option>)}</select></div>
+        <div className="text-sm" style={{ color: "#5B563F" }}>Effectif du jour (d'après le pointage) : <b className="tabular" data-testid="bt-jr-effectif">{effectif.total}</b> jour(s)-homme{effectif.noms.length > 0 ? " — " + effectif.noms.join(", ") : ""}</div>
+      </div>
+      <div className="mt-2">{lab("Travaux exécutés ce jour")}<textarea rows={3} value={d.works} onChange={(e) => setD({ ...d, works: e.target.value })} disabled={!canEdit} data-testid="bt-jr-travaux" className={ecInput} style={ecBorder} /></div>
+      <div className="mt-2">{lab("Incidents, arrêts, accidents (le cas échéant)")}<textarea rows={2} value={d.incidents} onChange={(e) => setD({ ...d, incidents: e.target.value })} disabled={!canEdit} data-testid="bt-jr-incidents" className={ecInput} style={ecBorder} /></div>
+      <div className="grid md:grid-cols-2 gap-2 mt-2">
+        <div>{lab("Visiteurs")}<input value={d.visitors} onChange={(e) => setD({ ...d, visitors: e.target.value })} disabled={!canEdit} data-testid="bt-jr-visiteurs" className={ecInput} style={ecBorder} /></div>
+        <div>{lab("Matériaux et matériel reçus")}<input value={d.materials} onChange={(e) => setD({ ...d, materials: e.target.value })} disabled={!canEdit} data-testid="bt-jr-materiaux" className={ecInput} style={ecBorder} /></div>
+      </div>
+      {canEdit && <div className="mt-3"><button onClick={() => onSave(d)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-jr-enregistrer">Enregistrer le journal du jour</button></div>}
+    </div>
+  );
+}
+
 function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail, employees, setEmployees, payslips }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // secrétariat : clients, situations et encaissements
@@ -270,7 +300,8 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   };
   const liberer = (s) => {
     if (!canEdit) return;
-    if (s.status !== "termine") { showToast("La retenue se libère à la réception : passez d'abord le chantier à « Terminé »."); return; }
+    const blocage = retenueBloquee(s);
+    if (blocage) { showToast(blocage); return; }
     const due = retenueDue(s.id);
     const amount = frt.amount === "" ? due : btR2(frt.amount);
     if (!(amount > 0) || amount > due + 0.004) { showToast("Le montant doit être compris entre 0 et la retenue à libérer (" + fmt(due) + ")."); return; }
@@ -366,6 +397,127 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     logAudit("BTP", "Salaire de base préparé pour la période", w.name + " : " + brut);
     showToast("Salaire de base de " + w.name + " mis à " + fmt(brut) + ". Allez dans Salaires → Bulletins de paie pour émettre le bulletin (cotisations incluses).");
   };
+  const [fvs, setFvs] = useState({ date: "", kind: "visite", subject: "", resp: "" });
+  const [fsr, setFsr] = useState({ kind: "visite", from: "", every: "", count: "" });
+  const [vOuv, setVOuv] = useState("");
+  const [jDate, setJDate] = useState(today);
+  const [jf, setJf] = useState(""); const [jt, setJt] = useState("");
+  const [frs, setFrs] = useState({ label: "", place: "", due: "", resp: "" });
+  const [rsFiltre, setRsFiltre] = useState("");
+  const [frc, setFrc] = useState({ prov: { dt: todayStr(), nt: "" }, def: { dt: todayStr(), nt: "" } });
+  const [fdc, setFdc] = useState({ label: "", ref: "", resp: "", due: "" });
+  const [dcFiltre, setDcFiltre] = useState("");
+  const BT_VKIND = [["visite", "Visite de supervision"], ["controle", "Contrôle de la qualité"], ["reunion", "Réunion de chantier"], ["client", "Réunion avec le client"]];
+  const nomVKind = (k) => (BT_VKIND.find((v) => v[0] === k) || [0, k])[1];
+  const BT_DSTAT = [["afaire", "À faire"], ["encours", "En cours"], ["remis", "Remis"], ["valide", "Validé par le client"]];
+  const DOCS_COURANTS = ["Étude de sol", "Plans d'architecture", "Plans de structure", "Plans d'électricité", "Plans de plomberie", "Cahier des charges", "Devis estimatif détaillé", "Autorisations et permis"];
+  const recep = (x) => x.reception || {};
+  const reservesDe = (x) => (x.reserves || []);
+  const reservesOuvertes = (x) => reservesDe(x).filter((r) => r.status !== "levee");
+  const reservesRetard = (x) => reservesOuvertes(x).filter((r) => r.due && r.due < today);
+  const visitesACompleter = (x) => (x.visits || []).filter((v) => v.status === "prevue" && v.date && v.date < today);
+  const docsRetard = (x) => (x.docs || []).filter((d) => (d.status === "afaire" || d.status === "encours") && d.due && d.due < today);
+  // Règle de libération de la retenue de garantie, choisie par chantier selon le marché : "" = chantier terminé, "prov", "def".
+  const retenueBloquee = (x) => {
+    const r = x.retRule || "";
+    if (r === "") return x.status !== "termine" ? "La retenue se libère à la réception : passez d'abord le chantier à « Terminé » (ou choisissez une autre règle dans l'onglet Réception et réserves)." : "";
+    const rc = recep(x);
+    if (r === "prov" && !rc.prov) return "Selon la règle choisie pour ce chantier, la retenue se libère à la réception provisoire : enregistrez-la d'abord (onglet Réception et réserves).";
+    if (r === "def" && !rc.def) return "Selon la règle choisie pour ce chantier, la retenue se libère à la réception définitive : enregistrez-la d'abord (onglet Réception et réserves).";
+    if (reservesOuvertes(x).length > 0) return "Il reste " + reservesOuvertes(x).length + " réserve(s) non levée(s) : levez-les avant de libérer la retenue.";
+    return "";
+  };
+  const effectifDuJour = (x, date) => {
+    const l = pts.filter((p) => p.siteId === x.id && p.date === date);
+    return { total: btR2(l.reduce((t, p) => t + (Number(p.units) || 0), 0)), noms: l.map((p) => (workers.find((w) => w.id === p.workerId) || {}).name).filter(Boolean) };
+  };
+  const ajouterVisite = (x) => {
+    if (!canEdit) return;
+    if (!fvs.date) { showToast("Indiquez la date de la visite ou de la réunion."); return; }
+    if (!fvs.subject.trim()) { showToast("Indiquez l'objet (ex. contrôle des fondations)."); return; }
+    maj(x.id, (r) => ({ ...r, visits: [...(r.visits || []), { id: btId(), date: fvs.date, kind: fvs.kind, subject: fvs.subject.trim(), resp: fvs.resp, status: "prevue", report: "", decisions: "" }] }));
+    setFvs({ ...fvs, subject: "", date: "" });
+  };
+  const planifierSerie = (x) => {
+    if (!canEdit) return;
+    const n = Math.floor(Number(fsr.count)), pas = Math.floor(Number(fsr.every));
+    if (!fsr.from || !(n > 0) || n > 60 || !(pas > 0) || pas > 365) { showToast("Indiquez la première date, l'intervalle en jours (1 à 365) et le nombre de visites (1 à 60)."); return; }
+    const out = []; const d = new Date(fsr.from + "T12:00:00");
+    for (let i = 0; i < n; i++) { out.push({ id: btId(), date: iso8(d), kind: fsr.kind, subject: nomVKind(fsr.kind) + " n° " + (i + 1), resp: "", status: "prevue", report: "", decisions: "" }); d.setDate(d.getDate() + pas); }
+    maj(x.id, (r) => ({ ...r, visits: [...(r.visits || []), ...out] }));
+    showToast(n + " visite(s) planifiée(s) : complétez le compte rendu après chacune.");
+  };
+  const iso8 = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const majVisite = (x, v, patch) => maj(x.id, (r) => ({ ...r, visits: r.visits.map((y) => (y.id === v.id ? { ...y, ...patch } : y)) }));
+  const marquerRealisee = (x, v) => {
+    if (!canEdit) return;
+    if (v.date > today) { showToast("Cette visite est datée dans le futur : elle ne peut être marquée réalisée qu'à partir de sa date."); return; }
+    majVisite(x, v, { status: "faite" }); setVOuv(v.id);
+    showToast("Visite marquée réalisée : rédigez maintenant le compte rendu.");
+  };
+  const enregistrerJournal = (x, d) => {
+    if (!canEdit) return;
+    if (!jDate || isFutureDate(jDate)) { showToast("Le journal ne peut pas être daté dans le futur."); return; }
+    if (!d.works.trim() && !d.incidents.trim()) { showToast("Décrivez au moins les travaux exécutés ce jour."); return; }
+    if (x.start && jDate < x.start) { showToast("Cette date est antérieure au début du chantier."); return; }
+    const ent = { id: btId(), date: jDate, weather: d.weather, works: d.works.trim(), incidents: d.incidents.trim(), visitors: d.visitors.trim(), materials: d.materials.trim(), author: d.author };
+    maj(x.id, (r) => ({ ...r, journal: [...(r.journal || []).filter((j) => j.date !== jDate), ent] }));
+    showToast("Journal du " + ecDateFr(jDate) + " enregistré.");
+  };
+  const ajouterReserve = (x) => {
+    if (!canEdit) return;
+    if (!frs.label.trim()) { showToast("Décrivez la réserve (le défaut à corriger)."); return; }
+    maj(x.id, (r) => ({ ...r, reserves: [...(r.reserves || []), { id: btId(), label: frs.label.trim(), place: frs.place.trim(), due: frs.due, resp: frs.resp, found: today, status: "ouverte", leveeDate: "" }] }));
+    setFrs({ label: "", place: "", due: "", resp: frs.resp });
+  };
+  const majReserve = (x, rs, patch) => maj(x.id, (r) => ({ ...r, reserves: r.reserves.map((y) => (y.id === rs.id ? { ...y, ...patch } : y)) }));
+  const enregistrerReception = (x, type, date, note) => {
+    if (!canEdit) return;
+    const rc = recep(x);
+    if (!date || isFutureDate(date)) { showToast("La date de réception ne peut pas être dans le futur."); return; }
+    if (x.start && date < x.start) { showToast("La réception ne peut pas précéder le début du chantier."); return; }
+    if (type === "prov" && rc.prov) { showToast("La réception provisoire est déjà enregistrée."); return; }
+    if (type === "def") {
+      if (!rc.prov) { showToast("Enregistrez d'abord la réception provisoire."); return; }
+      if (date < rc.prov.date) { showToast("La réception définitive ne peut pas précéder la réception provisoire."); return; }
+      if (reservesOuvertes(x).length > 0) { showToast("Il reste " + reservesOuvertes(x).length + " réserve(s) non levée(s) : levez-les avant la réception définitive."); return; }
+      if (rc.def) { showToast("La réception définitive est déjà enregistrée."); return; }
+    }
+    maj(x.id, (r) => ({ ...r, reception: { ...(r.reception || {}), [type]: { date, note: (note || "").trim() } } }));
+    showToast("Réception " + (type === "prov" ? "provisoire" : "définitive") + " enregistrée le " + ecDateFr(date) + ".");
+    logAudit("BTP", "Réception " + (type === "prov" ? "provisoire" : "définitive"), x.name);
+  };
+  const annulerReception = (x, type) => {
+    if (!canEdit) return;
+    const rc = recep(x);
+    if (type === "prov" && rc.def) { showToast("Annulez d'abord la réception définitive."); return; }
+    if (rels.some((r) => r.siteId === x.id && r.status !== "annulé") && (x.retRule === type)) { showToast("La retenue de garantie a déjà été encaissée sur la base de cette réception : annulez d'abord cet encaissement."); return; }
+    if (typeof window !== "undefined" && window.confirm && !window.confirm("Annuler cette réception ?")) return;
+    maj(x.id, (r) => { const n = { ...(r.reception || {}) }; delete n[type]; return { ...r, reception: n }; });
+  };
+  const ajouterDoc = (x) => {
+    if (!canEdit) return;
+    const label = fdc.label.trim();
+    if (!label) { showToast("Indiquez le document (ex. plans de structure)."); return; }
+    if ((x.docs || []).some((d) => btNom(d.label) === btNom(label) && btNom(d.ref) === btNom(fdc.ref))) { showToast("Ce document existe déjà."); return; }
+    maj(x.id, (r) => ({ ...r, docs: [...(r.docs || []), { id: btId(), label, ref: fdc.ref.trim(), resp: fdc.resp, due: fdc.due, status: "afaire", date: "" }] }));
+    setFdc({ label: "", ref: "", resp: fdc.resp, due: "" });
+  };
+  const insererDocs = (x) => {
+    if (!canEdit) return;
+    const deja = (x.docs || []).map((d) => btNom(d.label));
+    const n = DOCS_COURANTS.filter((l) => !deja.includes(btNom(l))).map((l) => ({ id: btId(), label: l, ref: "", resp: "", due: "", status: "afaire", date: "" }));
+    if (!n.length) { showToast("Ces documents courants existent déjà."); return; }
+    maj(x.id, (r) => ({ ...r, docs: [...(r.docs || []), ...n] }));
+    showToast(n.length + " document(s) ajouté(s) : renseignez le responsable et l'échéance de chacun.");
+  };
+  const majDoc = (x, d, patch) => maj(x.id, (r) => ({ ...r, docs: r.docs.map((y) => (y.id === d.id ? { ...y, ...patch } : y)) }));
+  const changerEtudes = (x, on) => {
+    if (!canEdit) return;
+    if (!on && ((x.docs || []).length > 0)) { showToast("Ce chantier a des documents d'études : retirez-les avant de désactiver la phase d'études."); return; }
+    maj(x.id, (r) => ({ ...r, etudes: on }));
+    if (!on && sub === "etudes") setSub("vue");
+  };
   const [sub, setSub] = useState("vue");
   const [fph, setFph] = useState({ label: "", start: "", end: "", weight: "" });
   const [ftk, setFtk] = useState({ title: "", assignee: "", due: "", priority: "normale", phaseId: "" });
@@ -397,7 +549,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
   const insererPhases = (x) => {
     if (!canEdit) return;
     const deja = (x.phases || []).map((y) => btNom(y.label));
-    const nouvelles = PHASES_COURANTES.filter((n) => !deja.includes(btNom(n))).map((n) => ({ id: btId(), label: n, start: "", end: "", weight: 0, pct: 0, realStart: "", realEnd: "" }));
+    const nouvelles = [...(x.etudes ? ["Études et conception"] : []), ...PHASES_COURANTES].filter((n) => !deja.includes(btNom(n))).map((n) => ({ id: btId(), label: n, start: "", end: "", weight: 0, pct: 0, realStart: "", realEnd: "" }));
     if (!nouvelles.length) { showToast("Ces étapes courantes existent déjà."); return; }
     maj(x.id, (r) => ({ ...r, phases: [...(r.phases || []), ...nouvelles] }));
     showToast(nouvelles.length + " étape(s) ajoutée(s) : renseignez maintenant les dates et le poids de chacune.");
@@ -528,6 +680,133 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     );
   };
 
+  const SupSite = (x) => {
+    const staff = x.staff || [];
+    const lab = (t) => <label className="text-xs" style={{ color: "#8A8370" }}>{t}</label>;
+    const vs = (x.visits || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const etatV = (v) => (v.status === "faite" ? "faite" : v.status === "annulee" ? "annulee" : v.date < today ? "acompleter" : v.date === today ? "aujourdhui" : "avenir");
+    const pastV = (e) => (e === "faite" ? ecPastille("Réalisée", "ok") : e === "annulee" ? ecPastille("Annulée", "neutre") : e === "acompleter" ? ecPastille("À réaliser ou annuler", "alerte") : e === "aujourdhui" ? ecPastille("Aujourd'hui", "attente") : ecPastille("À venir", "attente"));
+    const ent = (x.journal || []).find((j) => j.date === jDate);
+    const jl = (x.journal || []).filter((j) => (!jf || j.date >= jf) && (!jt || j.date <= jt)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const eff = effectifDuJour(x, jDate);
+    return (
+      <div data-testid="bt-sup">
+        <div className="display text-base mb-2" style={{ color: "#152238" }}>Calendrier de supervision</div>
+        <datalist id="bt-dl-objet">{["Contrôle de l'avancement des travaux", "Contrôle de l'implantation", "Contrôle des fondations", "Contrôle du ferraillage avant coulage", "Contrôle de la qualité du béton", "Réunion de coordination avec les sous-traitants", "Point d'avancement avec le client", "Visite préalable à la réception"].map((n) => <option key={n} value={n} />)}</datalist>
+        {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-5 gap-2 items-end">
+          <div>{lab("Date")}<input type="date" value={fvs.date} onChange={(e) => setFvs({ ...fvs, date: e.target.value })} data-testid="bt-vs-date" className={ecInput} style={ecBorder} /></div>
+          <div>{lab("Type")}<select value={fvs.kind} onChange={(e) => setFvs({ ...fvs, kind: e.target.value })} data-testid="bt-vs-type" className={ecInput} style={ecBorder}>{BT_VKIND.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+          <div className="md:col-span-2">{lab("Objet")}<div className="flex gap-1"><input value={fvs.subject} onChange={(e) => setFvs({ ...fvs, subject: e.target.value })} data-testid="bt-vs-objet" className={ecInput} style={ecBorder} /><BtFleche id="bt-dl-objet" onPick={(v) => setFvs({ ...fvs, subject: v })} /></div></div>
+          <div>{lab("Responsable")}<select value={fvs.resp} onChange={(e) => setFvs({ ...fvs, resp: e.target.value })} data-testid="bt-vs-resp" className={ecInput} style={ecBorder}><option value="">—</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}</select></div>
+        </div>
+        <div className="mt-2"><button onClick={() => ajouterVisite(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-vs-ajouter">Planifier</button></div>
+        <details className="mt-3 text-sm" data-testid="bt-vs-serie-bloc"><summary style={{ cursor: "pointer", fontWeight: 600 }}>Planifier une série de visites régulières</summary>
+          <div className="grid md:grid-cols-5 gap-2 items-end mt-2">
+            <div>{lab("Type")}<select value={fsr.kind} onChange={(e) => setFsr({ ...fsr, kind: e.target.value })} className={ecInput} style={ecBorder}>{BT_VKIND.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <div>{lab("Première date")}<input type="date" value={fsr.from} onChange={(e) => setFsr({ ...fsr, from: e.target.value })} data-testid="bt-sr-debut" className={ecInput} style={ecBorder} /></div>
+            <div>{lab("Tous les (jours)")}<input type="number" min="1" value={fsr.every} onChange={(e) => setFsr({ ...fsr, every: e.target.value })} data-testid="bt-sr-pas" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <div>{lab("Nombre de visites")}<input type="number" min="1" max="60" value={fsr.count} onChange={(e) => setFsr({ ...fsr, count: e.target.value })} data-testid="bt-sr-nombre" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <button onClick={() => planifierSerie(x)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-sr-creer">Créer la série</button>
+          </div></details></div>)}
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th>Type</th><th>Objet</th><th>Responsable</th><th>État</th><th></th></tr></thead>
+          <tbody>{vs.map((v) => (<React.Fragment key={v.id}><tr data-testid="bt-vs-ligne" style={{ opacity: v.status === "annulee" ? 0.55 : 1 }}><td className="py-1.5">{ecDateFr(v.date)}</td><td className="text-xs">{nomVKind(v.kind)}</td><td>{v.subject}</td><td className="text-xs">{v.resp || "—"}</td><td data-testid="bt-vs-etat">{pastV(etatV(v))}</td>
+            <td className="text-right whitespace-nowrap"><button onClick={() => setVOuv(vOuv === v.id ? "" : v.id)} className="text-xs underline mr-2" data-testid="bt-vs-cr">{vOuv === v.id ? "Fermer" : "Compte rendu"}</button>{canEdit && v.status === "prevue" && <button onClick={() => marquerRealisee(x, v)} className="text-xs mr-2" data-testid="bt-vs-realisee">Marquer réalisée</button>}{canEdit && v.status === "prevue" && <button onClick={() => majVisite(x, v, { status: "annulee" })} className="text-xs mr-2" style={{ color: "#A6432F" }} data-testid="bt-vs-annuler">Annuler</button>}{canEdit && v.status === "annulee" && <button onClick={() => majVisite(x, v, { status: "prevue" })} className="text-xs mr-2">Rétablir</button>}{canEdit && v.status !== "faite" && <button onClick={() => maj(x.id, (r) => ({ ...r, visits: r.visits.filter((y) => y.id !== v.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-vs-retirer">Retirer</button>}</td></tr>
+            {vOuv === v.id && (<tr data-testid="bt-vs-detail"><td colSpan={6} className="pb-3"><div className="ec-card p-3">
+              <div className="text-xs mb-1" style={{ color: "#7A7460" }}>{v.status === "faite" ? "Compte rendu de la visite" : "Le compte rendu se rédige une fois la visite marquée réalisée."}</div>
+              <div>{lab("Constats et observations")}<BtTexte rows={4} value={v.report} disabled={!canEdit || v.status !== "faite"} onCommit={(t) => majVisite(x, v, { report: t })} onSaved={() => showToast("Compte rendu enregistré ✓")} data-testid="bt-vs-constats" className={ecInput} style={ecBorder} /></div>
+              <div className="mt-2">{lab("Décisions et actions à mener")}<BtTexte rows={3} value={v.decisions} disabled={!canEdit || v.status !== "faite"} onCommit={(t) => majVisite(x, v, { decisions: t })} onSaved={() => showToast("Décisions enregistrées ✓")} data-testid="bt-vs-decisions" className={ecInput} style={ecBorder} /></div>
+              {v.status === "faite" && <div className="mt-2"><button onClick={() => setImprimer({ kind: "cr", id: x.id, vid: v.id })} className="px-3 py-1.5 rounded text-sm" style={ecBtn} data-testid="bt-vs-imprimer">Imprimer le compte rendu</button></div>}
+            </div></td></tr>)}</React.Fragment>))}</tbody>
+          {vs.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-vs-total"><td colSpan={6}>{vs.filter((v) => v.status === "faite").length} réalisée(s), {vs.filter((v) => etatV(v) === "avenir" || etatV(v) === "aujourdhui").length} à venir, {vs.filter((v) => etatV(v) === "acompleter").length} à régulariser</td></tr></tfoot>}</table></div>
+        {vs.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucune visite ni réunion planifiée.</div>}
+
+        <div className="display text-base mb-2 mt-6" style={{ color: "#152238" }}>Journal de chantier</div>
+        <div className="flex flex-wrap gap-3 items-end mb-2"><div>{lab("Jour")}<input type="date" max={today} value={jDate} onChange={(e) => setJDate(e.target.value)} data-testid="bt-jr-date" className={ecInput} style={ecBorder} /></div>
+          <div className="text-xs" style={{ color: "#7A7460" }}>{ent ? "Journal déjà rédigé pour ce jour : vous pouvez le modifier." : "Aucun journal pour ce jour."}</div></div>
+        <BtJournalForm key={x.id + "|" + jDate + "|" + (ent ? ent.id : "")} entry={ent} staff={staff} effectif={eff} canEdit={canEdit} onSave={(d) => enregistrerJournal(x, d)} />
+        <div className="flex flex-wrap gap-2 items-end mb-2"><div>{lab("Du")}<input type="date" value={jf} onChange={(e) => setJf(e.target.value)} data-testid="bt-jr-du" className={ecInput} style={ecBorder} /></div><div>{lab("Au")}<input type="date" value={jt} onChange={(e) => setJt(e.target.value)} data-testid="bt-jr-au" className={ecInput} style={ecBorder} /></div>
+          {jl.length > 0 && <button onClick={() => setImprimer({ kind: "journal", id: x.id, dates: jl.map((j) => j.date).sort() })} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-jr-imprimer">Imprimer ces journaux</button>}</div>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th>Météo</th><th className="text-right">Effectif</th><th>Travaux</th><th></th></tr></thead>
+          <tbody>{jl.map((j) => (<tr key={j.id} data-testid="bt-jr-ligne"><td className="py-1.5">{ecDateFr(j.date)}</td><td className="text-xs">{j.weather || "—"}</td><td className="text-right tabular">{effectifDuJour(x, j.date).total}</td><td className="text-xs">{(j.works || "").slice(0, 80)}{(j.works || "").length > 80 ? "…" : ""}</td>
+            <td className="text-right whitespace-nowrap"><button onClick={() => setJDate(j.date)} className="text-xs underline mr-2" data-testid="bt-jr-ouvrir">Ouvrir</button><button onClick={() => setImprimer({ kind: "journal", id: x.id, dates: [j.date] })} className="text-xs underline">Imprimer</button></td></tr>))}</tbody>
+          {jl.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-jr-total"><td colSpan={5}>{jl.length} jour(s) de journal</td></tr></tfoot>}</table></div>
+        {jl.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun journal enregistré{jf || jt ? " sur cette période" : ""}.</div>}
+      </div>
+    );
+  };
+
+  const RecepSite = (x) => {
+    const rc = recep(x), staff = x.staff || [];
+    const lab = (t) => <label className="text-xs" style={{ color: "#8A8370" }}>{t}</label>;
+    const rl = reservesDe(x).filter((r) => !rsFiltre || (rsFiltre === "retard" ? r.status !== "levee" && r.due && r.due < today : r.status === rsFiltre));
+    const bloc = retenueBloquee(x);
+    const due = retenueDue(x.id);
+    const finGarantie = rc.prov && Number(x.warrantyMonths) > 0 ? (() => { const d = new Date(rc.prov.date + "T12:00:00"); d.setMonth(d.getMonth() + Number(x.warrantyMonths)); return iso8(d); })() : "";
+    const recBloc = (type, titre) => {
+      const ex = rc[type];
+      const dt = frc[type].dt, nt = frc[type].nt;
+      const setDt = (v) => setFrc({ ...frc, [type]: { ...frc[type], dt: v } }), setNt = (v) => setFrc({ ...frc, [type]: { ...frc[type], nt: v } });
+      return (<div className="ec-card p-3 mb-3" data-testid={"bt-rc-" + type}>
+        <div className="display text-base mb-1" style={{ color: "#152238" }}>{titre}</div>
+        {ex ? (<div className="text-sm"><b data-testid={"bt-rc-" + type + "-date"}>Enregistrée le {ecDateFr(ex.date)}</b>{ex.note ? " — " + ex.note : ""}
+          <div className="flex flex-wrap gap-2 mt-2"><button onClick={() => setImprimer({ kind: "pv", id: x.id, type })} className="px-3 py-1.5 rounded text-sm" style={ecBtn} data-testid={"bt-rc-" + type + "-pv"}>Imprimer le procès-verbal</button>{canEdit && <button onClick={() => annulerReception(x, type)} className="text-xs" style={{ color: "#A6432F" }} data-testid={"bt-rc-" + type + "-annuler"}>Annuler la réception</button>}</div></div>)
+          : (canEdit ? (<div><div className="grid md:grid-cols-3 gap-2 items-end"><div>{lab("Date de réception")}<input type="date" max={today} value={dt} onChange={(e) => setDt(e.target.value)} data-testid={"bt-rc-" + type + "-champ-date"} className={ecInput} style={ecBorder} /></div><div className="md:col-span-2">{lab("Observations (facultatif)")}<input value={nt} onChange={(e) => setNt(e.target.value)} className={ecInput} style={ecBorder} /></div></div>
+            <div className="mt-2"><button onClick={() => enregistrerReception(x, type, dt, nt)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid={"bt-rc-" + type + "-enregistrer"}>Enregistrer la réception {type === "prov" ? "provisoire" : "définitive"}</button></div></div>) : <div className="text-sm" style={{ color: "#8A8370" }}>Pas encore enregistrée.</div>)}
+      </div>);
+    };
+    return (
+      <div data-testid="bt-recep">
+        <div className="text-sm mb-3" style={{ color: "#5B563F" }}>La réception constate la fin des travaux. Les <b>réserves</b> sont les défauts à corriger ; la retenue de garantie se libère selon la règle de votre marché.</div>
+        <div className="grid md:grid-cols-3 gap-2 mb-3 items-end">
+          <div className="md:col-span-2">{lab("Libération de la retenue de garantie (selon votre marché)")}<select value={x.retRule || ""} disabled={!canEdit} onChange={(e) => { maj(x.id, (r) => ({ ...r, retRule: e.target.value })); showToast("Règle de libération enregistrée ✓"); }} data-testid="bt-rc-regle" className={ecInput} style={ecBorder}><option value="">Quand le chantier est terminé (état « Terminé »)</option><option value="prov">À la réception provisoire (réserves levées)</option><option value="def">À la réception définitive (réserves levées)</option></select></div>
+          <div>{lab("Durée de la garantie après réception provisoire (mois, facultatif)")}<BtChamp type="number" min="0" value={x.warrantyMonths || ""} disabled={!canEdit} onCommit={(v) => maj(x.id, (r) => ({ ...r, warrantyMonths: Math.max(0, Math.floor(Number(v) || 0)) }))} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-rc-garantie" className={ecInput + " tabular"} style={ecBorder} /></div>
+        </div>
+        {finGarantie && <div className="text-sm mb-3" style={{ color: "#5B563F" }} data-testid="bt-rc-fin-garantie">Fin de la période de garantie : <b>{ecDateFr(finGarantie)}</b> ({x.warrantyMonths} mois après la réception provisoire).</div>}
+        <div className="text-sm mb-3 p-2 rounded" style={{ background: due > 0.004 ? (bloc ? "#FFF6E0" : "#E6F1EE") : "#F4F1E6", color: "#152238" }} data-testid="bt-rc-retenue">Retenue de garantie à libérer : <b className="tabular">{fmt(due)}</b> — {due <= 0.004 ? "rien à libérer." : bloc ? "pas encore libérable. " + bloc : "libérable : rendez-vous dans « Marché, avances et retenue »."}</div>
+        {recBloc("prov", "Réception provisoire")}
+        <div className="display text-base mb-2 mt-4" style={{ color: "#152238" }}>Réserves</div>
+        {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-4 gap-2 items-end">
+          <div className="md:col-span-2">{lab("Défaut à corriger")}<input value={frs.label} onChange={(e) => setFrs({ ...frs, label: e.target.value })} data-testid="bt-rs-nom" className={ecInput} style={ecBorder} /></div>
+          <div>{lab("Lieu (pièce, niveau…)")}<input value={frs.place} onChange={(e) => setFrs({ ...frs, place: e.target.value })} className={ecInput} style={ecBorder} /></div>
+          <div>{lab("À lever avant le")}<input type="date" value={frs.due} onChange={(e) => setFrs({ ...frs, due: e.target.value })} data-testid="bt-rs-echeance" className={ecInput} style={ecBorder} /></div>
+        </div><div className="flex flex-wrap gap-3 items-end mt-2"><div>{lab("Responsable de la correction")}<select value={frs.resp} onChange={(e) => setFrs({ ...frs, resp: e.target.value })} className={ecInput} style={ecBorder}><option value="">—</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}</select></div><button onClick={() => ajouterReserve(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-rs-ajouter">Ajouter la réserve</button></div></div>)}
+        <div className="flex flex-wrap gap-2 items-end mb-2"><div>{lab("État")}<select value={rsFiltre} onChange={(e) => setRsFiltre(e.target.value)} data-testid="bt-rs-filtre" className={ecInput} style={ecBorder}><option value="">Toutes</option><option value="ouverte">Ouvertes</option><option value="retard">En retard</option><option value="levee">Levées</option></select></div></div>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Réserve</th><th>Lieu</th><th>Responsable</th><th>À lever avant</th><th>État</th><th></th></tr></thead>
+          <tbody>{rl.map((r) => (<tr key={r.id} data-testid="bt-rs-ligne" style={{ opacity: r.status === "levee" ? 0.6 : 1 }}><td className="py-1.5">{r.label}</td><td className="text-xs">{r.place || "—"}</td><td className="text-xs">{r.resp || "—"}</td><td>{r.due ? ecDateFr(r.due) : "—"}</td><td>{r.status === "levee" ? ecPastille("Levée le " + ecDateFr(r.leveeDate), "ok") : r.due && r.due < today ? ecPastille("En retard", "alerte") : ecPastille("Ouverte", "attente")}</td>
+            <td className="text-right whitespace-nowrap">{canEdit && r.status !== "levee" && <button onClick={() => majReserve(x, r, { status: "levee", leveeDate: today })} className="text-xs mr-2" data-testid="bt-rs-lever">Lever</button>}{canEdit && r.status === "levee" && !rc.def && <button onClick={() => majReserve(x, r, { status: "ouverte", leveeDate: "" })} className="text-xs mr-2" data-testid="bt-rs-rouvrir">Rouvrir</button>}{canEdit && r.status !== "levee" && <button onClick={() => maj(x.id, (z) => ({ ...z, reserves: z.reserves.filter((y) => y.id !== r.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-rs-retirer">Retirer</button>}</td></tr>))}</tbody>
+          {reservesDe(x).length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-rs-total"><td colSpan={6}>{reservesDe(x).length} réserve(s) : {reservesOuvertes(x).length} ouverte(s) dont {reservesRetard(x).length} en retard, {reservesDe(x).length - reservesOuvertes(x).length} levée(s)</td></tr></tfoot>}</table></div>
+        {reservesDe(x).length === 0 && <div className="text-sm mb-3" style={{ color: "#8A8370" }}>Aucune réserve enregistrée.</div>}
+        <div className="mt-4">{recBloc("def", "Réception définitive")}</div>
+      </div>
+    );
+  };
+
+  const EtudesSite = (x) => {
+    const staff = x.staff || [];
+    const lab = (t) => <label className="text-xs" style={{ color: "#8A8370" }}>{t}</label>;
+    const etatD = (d) => (d.status === "valide" ? "valide" : d.status === "remis" ? "remis" : d.due && d.due < today ? "retard" : d.status);
+    const dl = (x.docs || []).filter((d) => !dcFiltre || etatD(d) === dcFiltre);
+    const nb = (x.docs || []).length, val = (x.docs || []).filter((d) => d.status === "valide").length;
+    return (
+      <div data-testid="bt-etudes">
+        <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Phase d'études et de conception : suivez les documents à produire (plans, études, devis, autorisations), leur responsable, leur échéance et leur validation par le client.{nb > 0 && <> Avancement des études : <b data-testid="bt-et-avancement">{val} / {nb}</b> document(s) validé(s).</>}</div>
+        <datalist id="bt-dl-doc">{DOCS_COURANTS.map((n) => <option key={n} value={n} />)}</datalist>
+        {canEdit && (<div className="ec-card p-3 mb-3"><div className="grid md:grid-cols-4 gap-2 items-end">
+          <div className="md:col-span-2">{lab("Document")}<div className="flex gap-1"><input value={fdc.label} onChange={(e) => setFdc({ ...fdc, label: e.target.value })} data-testid="bt-dc-nom" className={ecInput} style={ecBorder} /><BtFleche id="bt-dl-doc" onPick={(v) => setFdc({ ...fdc, label: v })} /></div></div>
+          <div>{lab("Référence ou indice (facultatif)")}<input value={fdc.ref} onChange={(e) => setFdc({ ...fdc, ref: e.target.value })} className={ecInput} style={ecBorder} /></div>
+          <div>{lab("Responsable")}<select value={fdc.resp} onChange={(e) => setFdc({ ...fdc, resp: e.target.value })} data-testid="bt-dc-resp" className={ecInput} style={ecBorder}><option value="">—</option>{staff.map((m) => <option key={m.id} value={m.name}>{m.name} ({m.role})</option>)}</select></div>
+        </div><div className="flex flex-wrap gap-3 items-end mt-2"><div>{lab("Échéance")}<input type="date" value={fdc.due} onChange={(e) => setFdc({ ...fdc, due: e.target.value })} data-testid="bt-dc-echeance" className={ecInput} style={ecBorder} /></div><button onClick={() => ajouterDoc(x)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-dc-ajouter">Ajouter le document</button><button onClick={() => insererDocs(x)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-dc-courants">Insérer les documents courants (à ajuster)</button></div></div>)}
+        <div className="flex flex-wrap gap-2 items-end mb-2"><div>{lab("État")}<select value={dcFiltre} onChange={(e) => setDcFiltre(e.target.value)} data-testid="bt-dc-filtre" className={ecInput} style={ecBorder}><option value="">Tous</option><option value="afaire">À faire</option><option value="encours">En cours</option><option value="retard">En retard</option><option value="remis">Remis</option><option value="valide">Validés</option></select></div></div>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Document</th><th>Réf.</th><th>Responsable</th><th>Échéance</th><th>Remis le</th><th>État</th><th></th></tr></thead>
+          <tbody>{dl.map((d) => (<tr key={d.id} data-testid="bt-dc-ligne"><td className="py-1.5">{d.label}</td><td className="text-xs">{d.ref || "—"}</td><td className="text-xs">{d.resp || "—"}</td><td>{d.due ? ecDateFr(d.due) : "—"} {etatD(d) === "retard" ? ecPastille("En retard", "alerte") : null}</td><td className="text-xs">{d.date ? ecDateFr(d.date) : "—"}</td>
+            <td>{canEdit ? <select value={d.status} onChange={(e) => majDoc(x, d, { status: e.target.value, date: e.target.value === "remis" || e.target.value === "valide" ? (d.date || today) : "" })} data-testid="bt-dc-etat" className="border rounded px-1 py-0.5 text-xs" style={ecBorder}>{BT_DSTAT.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select> : (BT_DSTAT.find((v) => v[0] === d.status) || [0, d.status])[1]}</td>
+            <td className="text-right">{canEdit && <button onClick={() => maj(x.id, (r) => ({ ...r, docs: r.docs.filter((y) => y.id !== d.id) }))} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-dc-retirer">Retirer</button>}</td></tr>))}</tbody>
+          {dl.length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }} data-testid="bt-dc-total"><td colSpan={7}>{dl.length} document(s), dont {dl.filter((d) => d.status === "valide").length} validé(s) et {dl.filter((d) => etatD(d) === "retard").length} en retard</td></tr></tfoot>}</table></div>
+        {dl.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>{nb === 0 ? "Aucun document : ajoutez ceux de votre phase d'études, ou insérez les documents courants puis renseignez responsable et échéance." : "Aucun document ne correspond à ce filtre."}</div>}
+      </div>
+    );
+  };
+
   const VueSite = (x) => {
     const phys = avPhys(x), fact = avFact(x), temps = tempsPct(x), bud = budgetTotal(x), dep = depensesDe(x.id);
     const alertes = [];
@@ -536,10 +815,16 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     if (bud > 0 && dep > bud) alertes.push("Les dépenses (" + fmt(dep) + ") dépassent le budget d'exécution (" + fmt(bud) + ").");
     if (phasesRetard(x).length) alertes.push(phasesRetard(x).length + " étape(s) en retard sur la date de fin prévue.");
     if (tachesRetard(x).length) alertes.push(tachesRetard(x).length + " tâche(s) en retard.");
+    if (visitesACompleter(x).length) alertes.push(visitesACompleter(x).length + " visite(s) ou réunion(s) à régulariser (réalisée ou annulée).");
+    if (reservesRetard(x).length) alertes.push(reservesRetard(x).length + " réserve(s) en retard.");
+    if (x.etudes && docsRetard(x).length) alertes.push(docsRetard(x).length + " document(s) d'études en retard.");
     const dans = (d, n) => d && d >= today && btJours(today, d) <= n;
     const ech = [];
     (x.phases || []).forEach((ph) => { if (ph.pct < 100 && dans(ph.start, 14) && !ph.realStart) ech.push({ d: ph.start, t: "Début de l'étape « " + ph.label + " »" }); if (ph.pct < 100 && dans(ph.end, 14)) ech.push({ d: ph.end, t: "Fin prévue de l'étape « " + ph.label + " »" }); });
     (x.tasks || []).forEach((k) => { if (k.status !== "fait" && dans(k.due, 7)) ech.push({ d: k.due, t: "Tâche : " + k.title + " (" + k.assignee + ")" }); });
+    (x.visits || []).forEach((v) => { if (v.status === "prevue" && dans(v.date, 14)) ech.push({ d: v.date, t: nomVKind(v.kind) + " : " + v.subject }); });
+    reservesOuvertes(x).forEach((r) => { if (dans(r.due, 14)) ech.push({ d: r.due, t: "Réserve à lever : " + r.label }); });
+    (x.docs || []).forEach((d) => { if ((d.status === "afaire" || d.status === "encours") && dans(d.due, 14)) ech.push({ d: d.due, t: "Document d'études : " + d.label }); });
     ech.sort((a, b) => String(a.d).localeCompare(String(b.d)));
     const kp = [["Avancement physique", phys === null ? "—" : phys + " %", "bt-vue-phys"], ["Avancement facturé", fact + " %", "bt-vue-fact"], ["Temps écoulé", temps === null ? "—" : temps + " %", "bt-vue-temps"], ["Dépensé / budget", fmt(dep) + (bud > 0 ? " / " + fmt(bud) : ""), "bt-vue-budget"], ["Marge à ce jour (facturé − dépensé)", fmt(btR2(factureHt(x.id) - dep)), "bt-vue-marge"]];
     return (
@@ -696,8 +981,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
             <div><label className="text-xs" style={{ color: "#8A8370" }}>État du chantier</label><select value={s.status} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, status: e.target.value }))} data-testid="bt-ch-etat" className={ecInput} style={ecBorder}>{BT_ETATS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue</label><input type="date" value={s.end || ""} disabled={!canEdit} onChange={(e) => maj(s.id, (r) => ({ ...r, end: e.target.value }))} className={ecInput} style={ecBorder} /></div>
           </div>
+          <label className="flex items-center gap-2 text-sm mb-3" style={{ color: "#5B563F" }}><input type="checkbox" checked={!!s.etudes} disabled={!canEdit} onChange={(e) => changerEtudes(s, e.target.checked)} data-testid="bt-ch-etudes" />Ce chantier comprend une phase d'études (plans, étude de sol, autorisations…)</label>
           <div className="flex flex-wrap gap-1 mb-4" style={{ borderBottom: "1px solid #E4DDC8", paddingBottom: 8 }}>
-            {[["vue", "Vue d'ensemble"], ["etapes", "Étapes d'exécution"], ["budget", "Budget d'exécution"], ["equipe", "Encadrement et tâches"], ["mo", "Main-d'œuvre"], ["marche", "Marché, avances et retenue"]].map(([id, l]) => (<button key={id} onClick={() => setSub(id)} data-testid={"bt-sub-" + id} className="px-3 py-1.5 text-sm rounded-lg" style={{ background: sub === id ? "#E6F1EE" : "transparent", color: sub === id ? "#152238" : "#6B6552", fontWeight: sub === id ? 600 : 500, border: "1px solid " + (sub === id ? "#0F6B5C" : "#E4DDC8") }}>{l}</button>))}
+            {[["vue", "Vue d'ensemble"], ["etapes", "Étapes d'exécution"], ["budget", "Budget d'exécution"], ["equipe", "Encadrement et tâches"], ["mo", "Main-d'œuvre"], ["sup", "Supervision et journal"], ["recep", "Réception et réserves"], ...(s.etudes ? [["etudes", "Études et plan"]] : []), ["marche", "Marché, avances et retenue"]].map(([id, l]) => (<button key={id} onClick={() => setSub(id)} data-testid={"bt-sub-" + id} className="px-3 py-1.5 text-sm rounded-lg" style={{ background: sub === id ? "#E6F1EE" : "transparent", color: sub === id ? "#152238" : "#6B6552", fontWeight: sub === id ? 600 : 500, border: "1px solid " + (sub === id ? "#0F6B5C" : "#E4DDC8") }}>{l}</button>))}
           </div>
           {sub === "vue" && VueSite(s)}
           {sub === "etapes" && EtapesSite(s)}
@@ -716,6 +1002,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
           {TachesSite(s)}
           </div>)}
           {sub === "mo" && MoSite(s)}
+          {sub === "sup" && SupSite(s)}
+          {sub === "recep" && RecepSite(s)}
+          {sub === "etudes" && s.etudes && EtudesSite(s)}
           {sub === "marche" && (<div>
           {(() => {
             const fact = factureHt(s.id), mar = btMarche(s);
@@ -757,7 +1046,7 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
             <button onClick={() => recevoirAvance(s)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="bt-avance-valider">Enregistrer l'avance</button>
           </div>)}
           <div className="display text-base mb-2 mt-5" style={{ color: "#152238" }}>Retenue de garantie</div>
-          <div className="text-sm mb-2" style={{ color: "#5B563F" }}>Retenue à libérer : <b className="tabular" data-testid="bt-retenue-due">{fmt(retenueDue(s.id))}</b> (taux de {s.retPct || 0} % sur chaque situation ; elle se libère à la réception du chantier)</div>
+          <div className="text-sm mb-2" style={{ color: "#5B563F" }}>Retenue à libérer : <b className="tabular" data-testid="bt-retenue-due">{fmt(retenueDue(s.id))}</b> (taux de {s.retPct || 0} % sur chaque situation ; règle de libération : {s.retRule === "prov" ? "à la réception provisoire" : s.retRule === "def" ? "à la réception définitive" : "quand le chantier est terminé"} — modifiable dans « Réception et réserves »)</div>
           {rels.filter((r) => r.siteId === s.id).length > 0 && (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th>Mode</th><th className="text-right">Montant</th><th>État</th><th></th></tr></thead>
             <tbody>{rels.filter((r) => r.siteId === s.id).map((r) => (<tr key={r.id} data-testid="bt-retrel-ligne" style={{ opacity: r.status === "annulé" ? 0.55 : 1 }}><td className="py-1.5">{ecDateFr(r.date)}</td><td>{r.mode === "banque" ? "Banque" : "Espèces"}</td><td className="text-right tabular">{fmt(r.amount)}</td><td>{r.status === "annulé" ? ecPastille("Annulé", "neutre") : ecPastille("Encaissée", "ok")}</td><td className="text-right">{canEdit && r.status !== "annulé" && <button onClick={() => annulerLiberation(r)} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-retrel-annuler">Annuler</button>}</td></tr>))}</tbody></table></div>)}
           {canEdit && retenueDue(s.id) > 0.004 && (<div className="grid md:grid-cols-4 gap-2 mt-2 items-end">
@@ -1010,6 +1299,46 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     </div>
   );
   const cellule = { padding: "4px 6px", border: "1px solid #bbb" };
+  const JournalSheet = ({ s, dates }) => (
+    <div>{dates.map((dt, i) => { const j = (s.journal || []).find((y) => y.date === dt); const ef = effectifDuJour(s, dt); if (!j) return null; return (
+      <div key={dt} style={{ color: "#152238", background: "#fff", fontFamily: "'Inter', sans-serif", fontSize: 12, width: "100%", maxWidth: 794, margin: "0 auto", padding: (typeof window !== "undefined" && window.innerWidth < 640) ? "16px 10px" : "32px 36px", boxSizing: "border-box", pageBreakAfter: i < dates.length - 1 ? "always" : "auto" }} data-testid="bt-journal-feuille">
+        {entete("JOURNAL DE CHANTIER")}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 6 }}><span>Chantier : <b>{s.name}</b> ({s.number})</span><span>Date : <b>{ecDateFr(dt)}</b></span></div>
+        <div style={{ marginBottom: 4 }}>Client : <b>{nomClient(s.clientId)}</b>{s.address ? " — " + s.address : ""}</div>
+        <div style={{ marginBottom: 10 }}>Météo : <b>{j.weather || "—"}</b> · Effectif pointé : <b>{ef.total}</b> jour(s)-homme{ef.noms.length ? " (" + ef.noms.join(", ") + ")" : ""}</div>
+        <div style={{ fontWeight: 700, marginTop: 6 }}>Travaux exécutés</div><div style={{ border: "1px solid #bbb", padding: 6, minHeight: 80, whiteSpace: "pre-wrap" }}>{j.works || "—"}</div>
+        <div style={{ fontWeight: 700, marginTop: 8 }}>Incidents, arrêts, accidents</div><div style={{ border: "1px solid #bbb", padding: 6, minHeight: 40, whiteSpace: "pre-wrap" }}>{j.incidents || "Néant"}</div>
+        <div style={{ marginTop: 8 }}>Visiteurs : {j.visitors || "—"}</div><div>Matériaux et matériel reçus : {j.materials || "—"}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 24, marginTop: 40 }}><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>Rédigé par{j.author ? " : " + j.author : ""}</div><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>Visa du maître d'œuvre</div></div>
+      </div>); })}</div>
+  );
+  const CrSheet = ({ s, v }) => (
+    <div style={{ color: "#152238", background: "#fff", fontFamily: "'Inter', sans-serif", fontSize: 12, width: "100%", maxWidth: 794, margin: "0 auto", padding: (typeof window !== "undefined" && window.innerWidth < 640) ? "16px 10px" : "32px 36px", boxSizing: "border-box" }} data-testid="bt-cr-feuille">
+      {entete("COMPTE RENDU — " + nomVKind(v.kind).toUpperCase())}
+      <div style={{ marginBottom: 4 }}>Chantier : <b>{s.name}</b> ({s.number}) · Date : <b>{ecDateFr(v.date)}</b></div>
+      <div style={{ marginBottom: 4 }}>Objet : <b>{v.subject}</b></div><div style={{ marginBottom: 10 }}>Responsable : {v.resp || "—"} · Client : {nomClient(s.clientId)}</div>
+      <div style={{ fontWeight: 700 }}>Constats et observations</div><div style={{ border: "1px solid #bbb", padding: 6, minHeight: 120, whiteSpace: "pre-wrap" }}>{v.report || "—"}</div>
+      <div style={{ fontWeight: 700, marginTop: 8 }}>Décisions et actions à mener</div><div style={{ border: "1px solid #bbb", padding: 6, minHeight: 80, whiteSpace: "pre-wrap" }}>{v.decisions || "—"}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 24, marginTop: 40 }}><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>Le responsable de la visite</div><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>Pour l'entreprise</div></div>
+    </div>
+  );
+  const PvSheet = ({ s, type }) => {
+    const rc = (s.reception || {})[type] || {}; const rs = s.reserves || [];
+    return (
+      <div style={{ color: "#152238", background: "#fff", fontFamily: "'Inter', sans-serif", fontSize: 12, width: "100%", maxWidth: 794, margin: "0 auto", padding: (typeof window !== "undefined" && window.innerWidth < 640) ? "16px 10px" : "32px 36px", boxSizing: "border-box" }} data-testid="bt-pv-feuille">
+        {entete("PROCÈS-VERBAL DE RÉCEPTION " + (type === "prov" ? "PROVISOIRE" : "DÉFINITIVE"))}
+        <div style={{ marginBottom: 4 }}>Chantier : <b>{s.name}</b> ({s.number}){s.address ? " — " + s.address : ""}</div>
+        <div style={{ marginBottom: 4 }}>Client (maître d'ouvrage) : <b>{nomClient(s.clientId)}</b></div>
+        <div style={{ marginBottom: 4 }}>Montant du marché (hors taxe) : <b>{fmt(btMarche(s))}</b></div>
+        <div style={{ marginBottom: 10 }}>Date de la réception : <b>{ecDateFr(rc.date)}</b>{rc.note ? " — " + rc.note : ""}</div>
+        <div style={{ fontWeight: 700 }}>Réserves ({rs.length})</div>
+        {rs.length === 0 ? <div style={{ border: "1px solid #bbb", padding: 6 }}>Aucune réserve.</div> : (<div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}><thead><tr style={{ background: "#F4F1E6" }}><th style={{ ...cellule, textAlign: "left" }}>Défaut</th><th style={cellule}>Lieu</th><th style={cellule}>À lever avant</th><th style={cellule}>État</th></tr></thead>
+          <tbody>{rs.map((r) => (<tr key={r.id}><td style={cellule}>{r.label}</td><td style={cellule}>{r.place || "—"}</td><td style={{ ...cellule, textAlign: "center" }}>{r.due ? ecDateFr(r.due) : "—"}</td><td style={{ ...cellule, textAlign: "center" }}>{r.status === "levee" ? "Levée le " + ecDateFr(r.leveeDate) : "À lever"}</td></tr>))}</tbody></table></div>)}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 40 }}>{["Le maître d'ouvrage (client)", "L'entreprise", "Le maître d'œuvre"].map((t) => (<div key={t} style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center", fontSize: 11 }}>{t}</div>))}</div>
+      </div>
+    );
+  };
+
   const DevisSheet = ({ s }) => (
     <div style={{ color: "#152238", background: "#fff", fontFamily: "'Inter', sans-serif", fontSize: 12, width: "100%", maxWidth: 794, margin: "0 auto", padding: (typeof window !== "undefined" && window.innerWidth < 640) ? "16px 10px" : "32px 36px", boxSizing: "border-box" }} data-testid="bt-devis-feuille">
       {entete("DEVIS ESTIMATIF — BORDEREAU DE PRIX")}
@@ -1072,9 +1401,12 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     sites.filter((s) => (s.status === "encours" || s.status === "preparation") && s.end && s.end < today).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Fin prévue le " + ecDateFr(s.end) + " dépassée (" + btJours(s.end, today) + " jours) : chantier toujours ouvert" }));
     sites.filter((s) => budgetTotal(s) > 0 && depensesDe(s.id) > budgetTotal(s)).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "budget", nom: s.name, txt: "Dépenses " + fmt(depensesDe(s.id)) + " au-dessus du budget de " + fmt(budgetTotal(s)) }));
     sites.filter((s) => s.status !== "termine" && phasesRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "etapes", nom: s.name, txt: phasesRetard(s).length + " étape(s) en retard sur la date de fin prévue" }));
+    sites.filter((s) => s.status !== "termine" && visitesACompleter(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "sup", nom: s.name, txt: visitesACompleter(s).length + " visite(s) ou réunion(s) planifiée(s) non réalisée(s) ni annulée(s)" }));
+    sites.filter((s) => reservesRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "recep", nom: s.name, txt: reservesRetard(s).length + " réserve(s) non levée(s) après l'échéance" }));
+    sites.filter((s) => s.etudes && docsRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "etudes", nom: s.name, txt: docsRetard(s).length + " document(s) d'études en retard" }));
     sites.filter((s) => s.status !== "termine" && tachesRetard(s).length > 0).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, sub: "equipe", nom: s.name, txt: tachesRetard(s).length + " tâche(s) de l'encadrement en retard" }));
     sites.filter((s) => s.status === "encours" && depensesDe(s.id) > 0 && !derniere(s.id)).forEach((s) => afaire.push({ tab: "situations", nom: s.name, txt: "Dépenses engagées (" + fmt(depensesDe(s.id)) + ") mais aucune situation encore émise" }));
-    sites.filter((s) => s.status === "termine" && retenueDue(s.id) > 0.004).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Chantier terminé : retenue de garantie de " + fmt(retenueDue(s.id)) + " à réclamer au client" }));
+    sites.filter((s) => retenueBloquee(s) === "" && retenueDue(s.id) > 0.004).forEach((s) => afaire.push({ tab: "chantiers", sel: s.id, nom: s.name, txt: "Chantier terminé : retenue de garantie de " + fmt(retenueDue(s.id)) + " à réclamer au client" }));
     deps.filter((d) => btResteDep(d) > 0.004 && btJours(d.date, today) > 30).forEach((d) => afaire.push({ tab: "depenses", sel: d.id, nom: d.supplier || nomSite(d.siteId), txt: "Dette de " + fmt(btResteDep(d)) + " à régler depuis " + btJours(d.date, today) + " jours (" + d.label + ")" }));
     const etapes = [
       ["Clients", "Enregistrez vos clients (maîtres d'ouvrage) : nom, téléphone, adresse.", "clients", clients.length > 0],
@@ -1184,6 +1516,9 @@ function BtpModule({ btp, setBtp, entries, setEntries, accounts, setAccounts, se
     : [["apercu", "Tableau de bord"], ["chantiers", "Chantiers"], ["clients", "Clients"], ["situations", "Situations"], ["depenses", "Dépenses"], ["rapports", "Rapports"], ["stats", "Statistiques"]];
   const imprDoc = (() => {
     if (!imprimer) return null;
+    if (imprimer.kind === "journal") { const s = sites.find((y) => y.id === imprimer.id); return s ? { titre: "Journal de chantier — " + s.name, node: <JournalSheet s={s} dates={imprimer.dates || []} /> } : null; }
+    if (imprimer.kind === "cr") { const s = sites.find((y) => y.id === imprimer.id); const v = s && (s.visits || []).find((y) => y.id === imprimer.vid); return v ? { titre: "Compte rendu — " + v.subject, node: <CrSheet s={s} v={v} /> } : null; }
+    if (imprimer.kind === "pv") { const s = sites.find((y) => y.id === imprimer.id); return s ? { titre: "PV de réception " + (imprimer.type === "prov" ? "provisoire" : "définitive") + " — " + s.name, node: <PvSheet s={s} type={imprimer.type} /> } : null; }
     if (imprimer.kind === "devis") { const s = sites.find((x) => x.id === imprimer.id); return s ? { titre: "Devis " + s.number, node: <DevisSheet s={s} /> } : null; }
     const x = sits.find((y) => y.id === imprimer.id);
     return x ? { titre: "Situation " + x.number, node: <SituationSheet x={x} /> } : null;
