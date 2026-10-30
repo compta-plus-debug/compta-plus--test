@@ -3005,6 +3005,7 @@ function App() {
             setBtp={setBtp}
             indus={indus}
             setIndus={setIndus}
+            saveCategoryNow={saveCategory}
             setAccounts={setAccounts}
             setEntries={setEntries}
             setProducts={setProducts}
