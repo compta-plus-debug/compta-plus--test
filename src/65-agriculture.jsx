@@ -11,32 +11,33 @@
 // Rien n'est préréglé : prix, quantités, taux, dates et taxe sont saisis par l'entreprise.
 //
 // Comptabilité (tout en gourdes) :
-//  • achat d'intrants : Débit 601 / Crédit caisse, banque ou 401 (à payer) ; règlement d'une dette : Débit 401 / Crédit caisse ou banque ;
-//  • facture de vente (produits, animaux vivants, services) : Débit 411 (net), 4191 (acompte imputé) / Crédit 701 et 445 (taxe, seulement si activée) ;
+//  • achat d'intrants : Débit 6021 / Crédit caisse, banque ou 401 (à payer) ; règlement d'une dette : Débit 401 / Crédit caisse ou banque ;
+//  • facture de vente (produits, animaux vivants, services) : Débit 411 (net), 4191 (acompte imputé) / Crédit 7012 et 445 (taxe, seulement si activée) ;
 //  • acompte de commande : Débit caisse ou banque / Crédit 4191 ; encaissement : Débit caisse ou banque / Crédit 411 ;
-//  • dépense de la ferme : Débit 601 achat d'animaux, 613 location de terre, 605 eau, irrigation et carburant, 615 entretien, 618 transport, 632 honoraires,
-//    661 main-d'œuvre journalière, 628 autres / Crédit caisse, banque ou 401 ;
+//  • dépense de la ferme : Débit 6022 achat d'animaux, 6132 location de terre, 6055 eau, irrigation et carburant, 6155 entretien, 6182 transport, 632 honoraires,
+//    6612 main-d'œuvre journalière, 6282 autres / Crédit caisse, banque ou 401 ;
 //  • toute annulation passe une écriture inverse.
 // Le stock, les campagnes, les bandes, le coût de revient et la main-d'œuvre salariée imputée sont un suivi de gestion : la main-d'œuvre salariée se paie par le module
 // Salaires (aucune écriture ici), et la valeur des récoltes, du cheptel et des stocks de fin d'exercice reste à passer avec l'expert-comptable.
-// Les comptes 601, 701, 4191, 605, 613, 615, 618, 628, 632 et 661 sont à confirmer avec l'expert-comptable.
+// Les comptes 6021, 6022, 7012, 4191, 6055, 6132, 6155, 6182, 6282, 632 et 6612 sont à confirmer avec l'expert-comptable.
 
-const AG_DEPENSES = [["main_oeuvre", "Main-d'œuvre journalière (journaliers)", "661"], ["salarie", "Main-d'œuvre salariée imputée (déjà payée par Salaires, sans écriture)", ""], ["animaux", "Achat d'animaux", "601"], ["veto", "Vétérinaire et agronome (honoraires)", "632"], ["terre", "Location de terre (fermage)", "613"], ["energie", "Eau, irrigation, carburant", "605"], ["entretien", "Entretien du matériel, clôtures et bâtiments", "615"], ["transport", "Transport des récoltes et des animaux", "618"], ["autre", "Autres frais", "628"]];
+const AG_DEPENSES = [["main_oeuvre", "Main-d'œuvre journalière (journaliers)", "6612"], ["salarie", "Main-d'œuvre salariée imputée (déjà payée par Salaires, sans écriture)", ""], ["animaux", "Achat d'animaux", "6022"], ["veto", "Vétérinaire et agronome (honoraires)", "632"], ["terre", "Location de terre (fermage)", "6132"], ["energie", "Eau, irrigation, carburant", "6055"], ["entretien", "Entretien du matériel, clôtures et bâtiments", "6155"], ["transport", "Transport des récoltes et des animaux", "6182"], ["autre", "Autres frais", "6282"]];
 const AG_ETATS_CMD = [["devis", "Devis"], ["confirmee", "Confirmée"], ["enprod", "En cours"], ["prete", "Prête"], ["livree", "Livrée et facturée"], ["annulee", "Annulée"]];
 const AG_COMPTES = {
   "411": { name: "Clients", type: "Actif" },
   "401": { name: "Fournisseurs", type: "Passif" },
   "445": { name: "Taxe collectée sur ventes (IVA/TCA)", type: "Passif" },
   "4191": { name: "Clients — avances et acomptes reçus", type: "Passif" },
-  "601": { name: "Achats d'intrants et d'animaux", type: "Charge" },
-  "605": { name: "Eau, irrigation, énergie, carburant", type: "Charge" },
-  "613": { name: "Loyers (location de terre)", type: "Charge" },
-  "615": { name: "Entretien et réparations", type: "Charge" },
-  "618": { name: "Transports", type: "Charge" },
-  "628": { name: "Autres charges d'exploitation", type: "Charge" },
+  "6021": { name: "Achats d'intrants agricoles (semences, engrais, aliments, produits vétérinaires)", type: "Charge" },
+  "6022": { name: "Achats d'animaux d'élevage (poussins, alevins, reproducteurs)", type: "Charge" },
+  "6055": { name: "Eau d'irrigation, énergie et carburant agricole", type: "Charge" },
+  "6132": { name: "Location de terres agricoles (fermage)", type: "Charge" },
+  "6155": { name: "Entretien du matériel agricole, des clôtures et des bâtiments d'élevage", type: "Charge" },
+  "6182": { name: "Transport des récoltes et des animaux", type: "Charge" },
+  "6282": { name: "Autres frais d'exploitation agricole", type: "Charge" },
   "632": { name: "Honoraires (vétérinaire, agronome)", type: "Charge" },
-  "661": { name: "Main-d'œuvre journalière", type: "Charge" },
-  "701": { name: "Ventes de produits agricoles et d'animaux", type: "Produit" },
+  "6612": { name: "Main-d'œuvre agricole (journaliers)", type: "Charge" },
+  "7012": { name: "Ventes de produits agricoles et d'animaux d'élevage", type: "Produit" },
   "512": { name: "Banque", type: "Actif" },
   "530": { name: "Caisse", type: "Actif" },
 };
@@ -243,7 +244,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     if (min < 0) { showToast("Le seuil d'alerte ne peut pas être négatif."); return; }
     ajouter({ type: "mat", id: agId(), name, unit: fm.unit.trim(), min, active: true });
     setFm({ name: "", unit: "", min: "" });
-    showToast("Matière « " + name + " » ajoutée."); logAudit("Agriculture et élevage", "Matière ajoutée", name);
+    showToast("Intrant « " + name + " » ajouté."); logAudit("Agriculture et élevage", "Intrant ajouté", name);
   };
   const acheter = () => {
     if (!canEdit) return;
@@ -254,8 +255,8 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     if (fa.mode === "apayer" && !fa.supplier.trim()) { showToast("Pour un achat à payer plus tard, indiquez le fournisseur."); return; }
     if (!verifDate(fa.date, "enregistrer cet achat")) return;
     const cpt = compteMode(fa.mode);
-    agAjouterComptes(accounts, setAccounts, ["601", cpt]);
-    const e = ecrire(fa.date, "Achat " + nomMat(fa.matId) + (fa.supplier.trim() ? " — " + fa.supplier.trim() : ""), [{ account: "601", debit: amount, credit: 0 }, { account: cpt, debit: 0, credit: amount }], fa.matId);
+    agAjouterComptes(accounts, setAccounts, ["6021", cpt]);
+    const e = ecrire(fa.date, "Achat " + nomMat(fa.matId) + (fa.supplier.trim() ? " — " + fa.supplier.trim() : ""), [{ account: "6021", debit: amount, credit: 0 }, { account: cpt, debit: 0, credit: amount }], fa.matId);
     ajouter({ type: "achat", id: agId(), date: fa.date, matId: fa.matId, qty, amount, supplier: fa.supplier.trim(), mode: fa.mode, entryId: e.id, status: "valide", settlements: [], by: currentUserEmail || "" });
     setFa({ ...fa, qty: "", amount: "" });
     showToast("Achat enregistré : " + qty + " " + unitMat(fa.matId) + " pour " + fmt(amount) + "."); logAudit("Agriculture et élevage", "Achat d'intrant", nomMat(fa.matId) + " — " + fmt(amount));
@@ -319,7 +320,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
             <button onClick={ajouterMat} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ag-mat-ajouter">Ajouter l'intrant</button></div>
           <div className="ec-card p-4"><div className="display text-base mb-2" style={{ color: "#152238" }}>Acheter des intrants</div>
             <div className="grid grid-cols-2 gap-2 items-end">
-              <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Matière</label><select value={fa.matId} onChange={(e) => setFa({ ...fa, matId: e.target.value })} data-testid="ag-ach-mat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{mats.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}</select></div>
+              <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Intrant</label><select value={fa.matId} onChange={(e) => setFa({ ...fa, matId: e.target.value })} data-testid="ag-ach-mat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{mats.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}</select></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Quantité achetée</label><input type="number" min="0" step="0.001" value={fa.qty} onChange={(e) => setFa({ ...fa, qty: e.target.value })} data-testid="ag-ach-qte" className={ecInput + " tabular"} style={ecBorder} /></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant total payé</label><input type="number" min="0" step="0.01" value={fa.amount} onChange={(e) => setFa({ ...fa, amount: e.target.value })} data-testid="ag-ach-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" value={fa.date} max={today} onChange={(e) => setFa({ ...fa, date: e.target.value })} data-testid="ag-ach-date" className={ecInput} style={ecBorder} /></div>
@@ -332,7 +333,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
           <div className="flex-1 min-w-[150px]"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (nom, unité)</label><input value={mq} onChange={(e) => setMq(e.target.value)} data-testid="ag-mat-recherche" className={ecInput} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>État du stock</label><select value={mb} onChange={(e) => setMb(e.target.value)} data-testid="ag-mat-filtre-etat" className={ecInput} style={ecBorder}><option value="">Tous</option><option value="bas">Stock bas</option><option value="ok">Normal</option><option value="arret">Arrêtée</option></select></div>
         </div>
-        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matière</th><th>Unité</th><th className="text-right">En stock</th><th className="text-right">Prix moyen d'achat</th><th className="text-right">Valeur du stock</th><th>État</th><th></th></tr></thead>
+        <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Intrant</th><th>Unité</th><th className="text-right">En stock</th><th className="text-right">Prix moyen d'achat</th><th className="text-right">Valeur du stock</th><th>État</th><th></th></tr></thead>
           <tbody>{rows.map((x) => { const e = etatMat(x); return (
             <tr key={x.id} data-testid="ag-mat-ligne" style={{ background: x.id === selMat ? "#E6F1EE" : undefined, opacity: e === "arret" ? 0.55 : 1 }}><td className="py-1.5 font-semibold">{x.name}</td><td>{x.unit}</td><td className="text-right tabular" data-testid="ag-mat-stock">{stockMat(x.id)}</td><td className="text-right tabular">{prixMoyen(x.id) ? fmt(prixMoyen(x.id)) : "—"}</td><td className="text-right tabular">{fmt(valeur(x))}</td>
               <td>{e === "bas" ? ecPastille("Stock bas", "alerte") : e === "arret" ? ecPastille("Arrêtée", "neutre") : ecPastille("Normal", "ok")}</td>
@@ -414,7 +415,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
       ajouter({ type: "rec", id: agId(), productId: p.id, outQty: out, lines: [{ matId: fr.matId, qty }] });
     } else maj(r.id, (x) => ({ ...x, lines: [...x.lines, { matId: fr.matId, qty }] }));
     setFr({ ...fr, matId: "", qty: "" });
-    showToast("Matière ajoutée à la recette.");
+    showToast("Intrant ajouté à la recette.");
   };
   const Produits = () => {
     const rows = prods.filter((p) => !pq.trim() || [p.name, p.unit].join(" ").toLowerCase().includes(pq.trim().toLowerCase()));
@@ -461,11 +462,11 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
           <div className="display text-base mb-2" style={{ color: "#152238" }}>Recette de transformation (intrants pour une transformation)</div>
           <div className="text-xs mb-2" style={{ color: "#8A8370" }}>La recette prépare la saisie d'un lot : vous pourrez toujours corriger les quantités réellement utilisées. Le coût estimé utilise le prix moyen d'achat de chaque intrant.</div>
           {rec && (<div className="text-sm mb-2" data-testid="ag-rec-resume">Une transformation donne <b>{rec.outQty}</b> {p.unit} — coût estimé des intrants : <b className="tabular" data-testid="ag-rec-cout">{fmt(coutRecette(rec))}</b>{rec.outQty > 0 ? " (soit " + fmt(agR2(coutRecette(rec) / rec.outQty)) + " par " + p.unit + ")" : ""}</div>)}
-          {rec && (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matière</th><th className="text-right">Quantité</th><th className="text-right">Coût estimé</th><th></th></tr></thead>
+          {rec && (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Intrant</th><th className="text-right">Quantité</th><th className="text-right">Coût estimé</th><th></th></tr></thead>
             <tbody>{rec.lines.map((l) => (<tr key={l.matId} data-testid="ag-rec-ligne"><td className="py-1.5">{nomMat(l.matId)}</td><td className="text-right tabular">{l.qty} {unitMat(l.matId)}</td><td className="text-right tabular">{fmt(agR2(l.qty * prixMoyen(l.matId)))}</td><td className="text-right">{canEdit && <button onClick={() => { if (rec.lines.length === 1) { setAgri((prev) => prev.filter((x) => x.id !== rec.id)); } else maj(rec.id, (x) => ({ ...x, lines: x.lines.filter((y) => y.matId !== l.matId) })); }} className="text-xs underline" data-testid="ag-rec-retirer">Retirer</button>}</td></tr>))}</tbody></table></div>)}
           {canEdit && (<div className="grid md:grid-cols-4 gap-2 items-end">
             {!rec && <div><label className="text-xs" style={{ color: "#8A8370" }}>Une transformation donne (en {p.unit})</label><input type="number" min="0" step="0.001" value={fr.outQty} onChange={(e) => setFr({ ...fr, outQty: e.target.value })} data-testid="ag-rec-sortie" className={ecInput + " tabular"} style={ecBorder} /></div>}
-            <div><label className="text-xs" style={{ color: "#8A8370" }}>Matière</label><select value={fr.matId} onChange={(e) => setFr({ ...fr, matId: e.target.value })} data-testid="ag-rec-mat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{mats.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}</select></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Intrant</label><select value={fr.matId} onChange={(e) => setFr({ ...fr, matId: e.target.value })} data-testid="ag-rec-mat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{mats.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Quantité</label><input type="number" min="0" step="0.001" value={fr.qty} onChange={(e) => setFr({ ...fr, qty: e.target.value })} data-testid="ag-rec-qte" className={ecInput + " tabular"} style={ecBorder} /></div>
             <button onClick={() => ajouterLigneRecette(p)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ag-rec-ajouter">Ajouter à la recette</button>
           </div>)}
@@ -542,9 +543,9 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Commande concernée (facultatif)</label><select value={fl.orderId} onChange={(e) => setFl({ ...fl, orderId: e.target.value })} data-testid="ag-lot-commande" className={ecInput} style={ecBorder}><option value="">— aucune —</option>{cmdsOuvertes.map((c) => <option key={c.id} value={c.id}>{c.number} — {nomClient(c.clientId)}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>À consommer avant (facultatif)</label><input type="date" value={fl.expire} onChange={(e) => setFl({ ...fl, expire: e.target.value })} data-testid="ag-lot-expire" className={ecInput} style={ecBorder} /></div>
           </div>
-          <div className="display text-base mt-3 mb-1" style={{ color: "#152238" }}>Matières utilisées</div>
+          <div className="display text-base mt-3 mb-1" style={{ color: "#152238" }}>Intrants utilisés</div>
           {fl.productId && recetteDe(fl.productId) && <button onClick={remplirRecette} className="text-xs underline mb-2" data-testid="ag-lot-recette">Remplir depuis la recette</button>}
-          {fl.lines.length > 0 && (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matière</th><th className="text-right">Quantité utilisée</th><th className="text-right">En stock</th><th className="text-right">Coût (prix moyen)</th><th></th></tr></thead>
+          {fl.lines.length > 0 && (<div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Intrant</th><th className="text-right">Quantité utilisée</th><th className="text-right">En stock</th><th className="text-right">Coût (prix moyen)</th><th></th></tr></thead>
             <tbody>{fl.lines.map((l) => (<tr key={l.matId} data-testid="ag-lot-mligne"><td className="py-1.5">{nomMat(l.matId)}</td><td className="text-right"><input type="number" min="0" step="0.001" value={l.qty} onChange={(e) => setFl({ ...fl, lines: fl.lines.map((x) => (x.matId === l.matId ? { ...x, qty: agQ(e.target.value) } : x)) })} data-testid="ag-lot-mqte" className="border rounded px-1 py-0.5 text-sm tabular text-right" style={{ ...ecBorder, width: 90 }} /> {unitMat(l.matId)}</td><td className="text-right tabular" style={{ color: stockMat(l.matId) + 0.0005 < l.qty ? "#A6432F" : undefined }}>{stockMat(l.matId)}</td><td className="text-right tabular">{fmt(agR2(l.qty * prixMoyen(l.matId)))}</td><td className="text-right"><button onClick={() => setFl({ ...fl, lines: fl.lines.filter((x) => x.matId !== l.matId) })} className="text-xs underline" data-testid="ag-lot-mretirer">Retirer</button></td></tr>))}</tbody></table></div>)}
           <div className="grid md:grid-cols-4 gap-2 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Ajouter un intrant</label><select value={fl.matId} onChange={(e) => setFl({ ...fl, matId: e.target.value })} data-testid="ag-lot-mat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{mats.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} (stock {stockMat(x.id)} {x.unit})</option>)}</select></div>
@@ -576,8 +577,8 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
         {rows.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>{lots.length === 0 ? "Aucune transformation enregistrée." : "Aucun lot ne correspond à ces filtres."}</div>}
         {l0 && (() => { const c = coutLot(l0); return (<div className="ec-card p-4 mt-5" data-testid="ag-lot-detail">
           <div className="display text-lg mb-2" style={{ color: "#152238" }}>{l0.number} — {nomLot(l0)} ({l0.qty}{l0.productId ? " " + unitProd(l0.productId) : ""})</div>
-          <div className="text-sm mb-2">Matières <b className="tabular">{fmt(c.m)}</b> · main-d'œuvre ({l0.hours || 0} h × {fmt(l0.rate || 0)}) <b className="tabular">{fmt(c.mo)}</b> · frais <b className="tabular">{fmt(c.fr)}</b> · <b>coût de revient {fmt(c.total)}</b> · unitaire <b className="tabular" data-testid="ag-lot-d-unit">{fmt(agR2(c.total / l0.qty))}</b>{l0.orderId ? " · commande " + ((cmds.find((x) => x.id === l0.orderId) || {}).number || "") : ""}</div>
-          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Matière</th><th className="text-right">Quantité</th><th className="text-right">Prix moyen</th><th className="text-right">Coût</th></tr></thead>
+          <div className="text-sm mb-2">Intrants <b className="tabular">{fmt(c.m)}</b> · main-d'œuvre ({l0.hours || 0} h × {fmt(l0.rate || 0)}) <b className="tabular">{fmt(c.mo)}</b> · frais <b className="tabular">{fmt(c.fr)}</b> · <b>coût de revient {fmt(c.total)}</b> · unitaire <b className="tabular" data-testid="ag-lot-d-unit">{fmt(agR2(c.total / l0.qty))}</b>{l0.orderId ? " · commande " + ((cmds.find((x) => x.id === l0.orderId) || {}).number || "") : ""}</div>
+          <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Intrant</th><th className="text-right">Quantité</th><th className="text-right">Prix moyen</th><th className="text-right">Coût</th></tr></thead>
             <tbody>{l0.lines.map((x) => (<tr key={x.matId}><td className="py-1.5">{nomMat(x.matId)}</td><td className="text-right tabular">{x.qty} {unitMat(x.matId)}</td><td className="text-right tabular">{fmt(x.pu)}</td><td className="text-right tabular">{fmt(x.cost)}</td></tr>))}</tbody></table></div>
           <div className="flex flex-wrap gap-2"><button onClick={() => setImprimer({ kind: "lot", id: l0.id })} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ag-lot-imprimer">Imprimer la fiche de transformation</button>{canEdit && l0.status !== "annulé" && <button onClick={() => annulerLot(l0)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ag-lot-annuler">Annuler ce lot</button>}</div>
         </div>); })()}
@@ -608,9 +609,9 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const cmd = orderId ? cmds.find((c) => c.id === orderId) : null;
     const recup = cmd ? Math.min(acomptesDispo(cmd), ttc) : 0;
     const net = agR2(ttc - recup);
-    agAjouterComptes(accounts, setAccounts, ["411", "701", ...(tca > 0 ? ["445"] : []), ...(recup > 0 ? ["4191"] : [])]);
+    agAjouterComptes(accounts, setAccounts, ["411", "7012", ...(tca > 0 ? ["445"] : []), ...(recup > 0 ? ["4191"] : [])]);
     const number = numero("FA", facts, date);
-    const e = ecrire(date, "Facture " + number + " — " + nomClient(clientId), [{ account: "411", debit: net, credit: 0 }, { account: "4191", debit: recup, credit: 0 }, { account: "701", debit: 0, credit: ht }, { account: "445", debit: 0, credit: tca }], clientId || "passage");
+    const e = ecrire(date, "Facture " + number + " — " + nomClient(clientId), [{ account: "411", debit: net, credit: 0 }, { account: "4191", debit: recup, credit: 0 }, { account: "7012", debit: 0, credit: ht }, { account: "445", debit: 0, credit: tca }], clientId || "passage");
     const f = { type: "fact", id: agId(), number, date, dueDate: date, clientId: clientId || "", orderId: orderId || "", lines: lines.map((l) => ({ id: agId(), label: l.label, productId: l.productId || "", bandeId: l.bandeId || "", animalId: l.animalId || "", service: !!l.service, perte: !!l.perte, motif: l.motif || "", motifTxt: l.motifTxt || "", unit: l.unit || "", qty: l.qty, pu: l.pu })), ht, tcaRate, tca, ttc, recup, net, entryId: e.id, payments: [], status: "emise", by: currentUserEmail || "" };
     if (payNow && net > 0) {
       const cpt = compteMode(payMode === "banque" ? "banque" : "caisse");
@@ -1468,7 +1469,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const imp = clients.map((c) => { const fs = factsOk.filter((f) => f.clientId === c.id && agSolde(f).reste > 0.004); const b = [0, 0, 0, 0]; fs.forEach((f) => { const j = agJours(f.date, today); const r = agSolde(f).reste; b[j <= 30 ? 0 : j <= 60 ? 1 : j <= 90 ? 2 : 3] += r; }); return { c, n: fs.length, b: b.map(agR2), tot: agR2(b.reduce((s, x) => s + x, 0)) }; }).filter((x) => x.tot > 0);
     const S = (a, f) => agR2(a.reduce((s, x) => s + f(x), 0));
     const exporterMarge = () => ecTelecharger("marge-par-produit-" + today + ".csv", [["Produit", "Quantité vendue", "Ventes HT", "Coût unitaire moyen", "Coût des ventes", "Marge", "Marge %"], ...parProd.map((x) => [x.p.name, x.q, x.ca, x.cu, x.cout, x.marge, x.pct]), ["Total", "", S(parProd, (x) => x.ca), "", S(parProd, (x) => x.cout), S(parProd, (x) => x.marge), ""]]);
-    const exporterStock = () => ecTelecharger("stock-" + today + ".csv", [["Type", "Nom", "Unité", "En stock", "Prix moyen d'achat", "Valeur"], ...mats.map((m) => ["Matière", m.name, m.unit, stockMat(m.id), prixMoyen(m.id), agR2(stockMat(m.id) * prixMoyen(m.id))]), ...prods.map((p) => ["Produit fini", p.name, p.unit, stockProd(p.id), coutUnitProd(p.id), agR2(stockProd(p.id) * coutUnitProd(p.id))])]);
+    const exporterStock = () => ecTelecharger("stock-" + today + ".csv", [["Type", "Nom", "Unité", "En stock", "Prix moyen d'achat", "Valeur"], ...mats.map((m) => ["Intrant", m.name, m.unit, stockMat(m.id), prixMoyen(m.id), agR2(stockMat(m.id) * prixMoyen(m.id))]), ...prods.map((p) => ["Produit fini", p.name, p.unit, stockProd(p.id), coutUnitProd(p.id), agR2(stockProd(p.id) * coutUnitProd(p.id))])]);
     const exporterImp = () => ecTelecharger("impayes-clients-" + today + ".csv", [["Client", "Factures", "0-30 j", "31-60 j", "61-90 j", "Plus de 90 j", "Reste dû"], ...imp.map((x) => [x.c.name, x.n, ...x.b, x.tot])]);
     return (
       <div>
@@ -1602,15 +1603,15 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const c = coutLot(l);
     return (
       <div style={cadre} data-testid="ag-lot-feuille">
-        {entete("FICHE DE FABRICATION" + (l.status === "annulé" ? " — ANNULÉE" : ""))}
+        {entete("FICHE DE TRANSFORMATION" + (l.status === "annulé" ? " — ANNULÉE" : ""))}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Lot <b>{l.number}</b></span><span>Fabriqué le {ecDateFr(l.date)}</span></div>
         <div style={{ marginBottom: 4 }}>Produit : <b>{nomLot(l)}</b> — quantité : <b>{l.qty}{l.productId ? " " + unitProd(l.productId) : ""}</b></div>
         {l.expire && <div style={{ marginBottom: 4 }}>À consommer avant le : <b>{ecDateFr(l.expire)}</b></div>}
         {l.orderId && <div style={{ marginBottom: 4 }}>Commande : {(cmds.find((x) => x.id === l.orderId) || {}).number}</div>}
-        <div style={{ overflowX: "auto", marginTop: 8 }}><table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}><thead><tr style={{ background: "#F4F1E6" }}><th style={{ ...cellule, textAlign: "left" }}>Matière</th><th style={{ ...cellule, textAlign: "right" }}>Quantité</th><th style={{ ...cellule, textAlign: "right" }}>Prix moyen</th><th style={{ ...cellule, textAlign: "right" }}>Coût</th></tr></thead>
+        <div style={{ overflowX: "auto", marginTop: 8 }}><table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}><thead><tr style={{ background: "#F4F1E6" }}><th style={{ ...cellule, textAlign: "left" }}>Intrant</th><th style={{ ...cellule, textAlign: "right" }}>Quantité</th><th style={{ ...cellule, textAlign: "right" }}>Prix moyen</th><th style={{ ...cellule, textAlign: "right" }}>Coût</th></tr></thead>
           <tbody>{l.lines.map((x) => (<tr key={x.matId}><td style={cellule}>{nomMat(x.matId)}</td><td style={{ ...cellule, textAlign: "right" }}>{x.qty} {unitMat(x.matId)}</td><td style={{ ...cellule, textAlign: "right" }}>{fmt(x.pu)}</td><td style={{ ...cellule, textAlign: "right" }}>{fmt(x.cost)}</td></tr>))}</tbody></table></div>
         <div style={{ maxWidth: 380, marginLeft: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Matières</span><span>{fmt(c.m)}</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span>Intrants</span><span>{fmt(c.m)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Main-d'œuvre ({l.hours || 0} h × {fmt(l.rate || 0)})</span><span>{fmt(c.mo)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Autres frais</span><span>{fmt(c.fr)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, borderTop: "1px solid #152238", marginTop: 4, paddingTop: 4 }}><span>Coût de revient</span><span>{fmt(c.total)}</span></div>
