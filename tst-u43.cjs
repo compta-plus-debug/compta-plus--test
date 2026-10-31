@@ -29,6 +29,13 @@ const seed=()=>[
  ok('parcelle ajoutée',/Champ du bas/.test(await g(p,'ag-parc-liste').innerText()));
  await g(p,'ag-parc-nom').fill('champ du bas');await g(p,'ag-parc-ajouter').click();await p.waitForTimeout(250);
  ok('doublon de parcelle refusé',(await cat(p,'agri')).filter(r=>r.type==='parc').length===1);
+ ok('le refus est écrit sous le bouton',/existe déjà/.test(await g(p,'ag-parc-erreur').innerText())&&(await g(p,'ag-parc-ligne').count())===1);
+ await g(p,'ag-parc-nom').fill('Parcelle rapide');await g(p,'ag-parc-ajouter').dblclick();await p.waitForTimeout(350);
+ ok('double clic rapide : une seule parcelle créée',(await cat(p,'agri')).filter(r=>r.type==='parc'&&/rapide/i.test(r.name)).length===1,(await cat(p,'agri')).filter(r=>r.type==='parc').length);
+ await g(p,'ag-parc-nom').fill('PARCELLE RAPIDE');await g(p,'ag-parc-ajouter').click();await p.waitForTimeout(250);
+ ok('doublon en majuscules refusé',(await cat(p,'agri')).filter(r=>r.type==='parc').length===2);
+ await g(p,'ag-parc-retirer').last().click();await p.waitForTimeout(300);
+ ok('une parcelle sans campagne peut être retirée',(await cat(p,'agri')).filter(r=>r.type==='parc').length===1&&(await g(p,'ag-parc-ligne').count())===1);
  await g(p,'ag-camp-nom').fill('Maïs printemps');await g(p,'ag-camp-parcelle').selectOption({index:1});await g(p,'ag-camp-produit').selectOption('p1');await g(p,'ag-camp-debut').fill(back(30));await g(p,'ag-camp-creer').click();await p.waitForTimeout(350);
  ok('campagne ouverte avec numéro',(await g(p,'ag-camp-ligne').count())===1&&/CP-/.test(await g(p,'ag-camp-ligne').innerText()),await g(p,'ag-camp-ligne').count());
  await g(p,'ag-camp-ouvrir').click();await p.waitForTimeout(300);

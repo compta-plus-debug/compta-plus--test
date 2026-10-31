@@ -69,4 +69,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 62-immobilier | 732 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 63-btp | 1597 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 64-industries | 1236 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
-| 65-agriculture | 1670 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
+| 65-agriculture | 1688 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
