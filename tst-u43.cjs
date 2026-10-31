@@ -155,7 +155,10 @@ const seed=()=>[
  await p.getByRole('button',{name:'Calendrier fiscal'}).first().click();await p.waitForTimeout(500);
  const t=await p.locator('body').innerText();
  ok('calendrier fiscal : liste annuelle des versements au 31 octobre, acomptes, retenues du 1er au 15',g(p,'calendrier-fiscal')&&/Liste annuelle des versements/.test(t)&&/Acomptes provisionnels/.test(t)&&/Du 1er au 15/.test(t));
- ok('les dates à confirmer sont signalées',/À confirmer/.test(t)&&(await g(p,'cal-annuelles').locator('tr').count())===6,await g(p,'cal-annuelles').locator('tr').count());
+ ok('les dates à confirmer sont signalées',/À confirmer/.test(t)&&(await g(p,'cal-annuelles').locator('[data-testid="cal-ligne"]').count())===6,await g(p,'cal-annuelles').locator('[data-testid="cal-ligne"]').count());
+ await p.setViewportSize({width:360,height:740});await p.waitForTimeout(400);
+ const larg=await p.evaluate(()=>({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth,cartes:document.querySelectorAll('[data-testid="calendrier-fiscal"] .ec-card').length}));
+ ok('calendrier fiscal : en cartes et sans débordement à 360 px',larg.cartes===4&&larg.sw<=larg.cw+1,larg);
  await p.close();}
 // ── Cartes « Pour démarrer » Restauration et Hôtellerie
 {const {p}=await boot(b,{settings:{companyName:'R',currency:'HTG'},primary:true,cats:{},pageInit:mk(['restauration'],'Administrateur')});await p.waitForTimeout(1500);
