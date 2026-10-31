@@ -19,7 +19,7 @@ const sold=(e,a)=>e.flatMap(x=>x.lines).filter(l=>l.account===a).reduce((s,l)=>s
 {const {p}=await boot(b,{settings:{companyName:'Atelier Test',currency:'HTG'},primary:true,cats:{indus:[]},pageInit:mk('Administrateur')});await p.waitForTimeout(1500);
  ok('module Industries ouvert',(await g(p,'indus-module').count())===1);
  const tabs=await p.locator('[data-testid^="in-tab-"]').evaluateAll(e=>e.map(x=>x.innerText));
- ok('10 onglets pour le responsable',tabs.length===10,tabs);
+ ok('11 onglets pour le responsable (dont Catalogue)',tabs.length===11,tabs);
  ok('guide en 7 étapes et message de départ',(await g(p,'in-etape').count())===7&&(await g(p,'in-vide').count())===1);
  // matières
  await to(p,'matieres');
@@ -172,7 +172,7 @@ const sold=(e,a)=>e.flatMap(x=>x.lines).filter(l=>l.account===a).reduce((s,l)=>s
 // Vendeur
 {const {p}=await boot(b,{settings:{companyName:'Atelier Test',currency:'HTG'},primary:true,cats:{indus:[{type:'client',id:'c1',name:'Client A'}]},pageInit:mk('Vendeur')});await p.waitForTimeout(1500);
  const tabs=await p.locator('[data-testid^="in-tab-"]').evaluateAll(e=>e.map(x=>x.innerText));
- ok('Vendeur : 4 onglets seulement',tabs.length===4&&!tabs.includes('Production'),tabs);
+ ok('Vendeur : 5 onglets seulement (dont Catalogue)',tabs.length===5&&!tabs.includes('Production'),tabs);
  ok('Vendeur : note d\'accueil',(await g(p,'in-accueil-note').count())===1);
 }
 // Lecteur
