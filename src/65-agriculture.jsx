@@ -112,7 +112,11 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
   const unitProd = (id) => (prods.find((x) => x.id === id) || {}).unit || "";
   const compteMode = (m) => (m === "banque" ? "512" : m === "apayer" ? "401" : "530");
   const maj = (id, fn) => setAgri((prev) => (prev || []).map((r) => (r.id === id ? fn(r) : r)));
-  const ajouter = (rec) => setAgri((prev) => [...(prev || []), rec]);
+  // Copie toujours à jour des données : deux clics rapides ne passent plus le contrôle des doublons avant la mise à jour de l'écran.
+  const agriRef = React.useRef(agri || []);
+  agriRef.current = agri || [];
+  const lignesAJour = (type) => agRows(agriRef.current, type);
+  const ajouter = (rec) => { agriRef.current = [...agriRef.current, rec]; setAgri((prev) => ((prev || []).some((r) => r && r.id === rec.id) ? prev : [...(prev || []), rec])); };
   const ecrire = (date, label, lines, dossierId) => {
     const e = { id: uid(), date, createdAt: new Date().toISOString(), label, lines: lines.filter((l) => l.debit > 0 || l.credit > 0), kind: "agri", dossierId };
     setEntries((prev) => [...prev, e]);
@@ -201,7 +205,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     if (!canFront) return;
     const name = fcl.name.trim();
     if (!name) { showToast("Indiquez le nom du client."); return; }
-    if (clients.some((c) => agNom(c.name) === agNom(name))) { showToast("Un client de ce nom existe déjà."); return; }
+    if (lignesAJour("client").some((c) => agNom(c.name) === agNom(name))) { showToast("Un client de ce nom existe déjà."); return; }
     ajouter({ type: "client", id: agId(), name, phone: fcl.phone.trim(), address: fcl.address.trim() });
     setFcl({ name: "", phone: "", address: "" });
     showToast("Client « " + name + " » ajouté."); logAudit("Agriculture et élevage", "Client ajouté", name);
@@ -239,7 +243,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const name = fm.name.trim();
     if (!name) { showToast("Indiquez le nom de l'intrant (ex. Semences de maïs, Engrais, Aliment poulet)."); return; }
     if (!fm.unit.trim()) { showToast("Indiquez l'unité (kg, sac, litre, tête…)."); return; }
-    if (mats.some((m) => agNom(m.name) === agNom(name))) { showToast("Un intrant de ce nom existe déjà."); return; }
+    if (lignesAJour("mat").some((m) => agNom(m.name) === agNom(name))) { showToast("Un intrant de ce nom existe déjà."); return; }
     const min = agQ(fm.min);
     if (min < 0) { showToast("Le seuil d'alerte ne peut pas être négatif."); return; }
     ajouter({ type: "mat", id: agId(), name, unit: fm.unit.trim(), min, active: true });
@@ -385,7 +389,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const name = fp.name.trim();
     if (!name) { showToast("Indiquez le nom du produit (ex. Pain, Savon 200 g, Table 6 places)."); return; }
     if (!fp.unit.trim()) { showToast("Indiquez l'unité de vente (kg, sac, régime, douzaine, tête…)."); return; }
-    if (prods.some((p) => agNom(p.name) === agNom(name))) { showToast("Un produit de ce nom existe déjà."); return; }
+    if (lignesAJour("prod").some((p) => agNom(p.name) === agNom(name))) { showToast("Un produit de ce nom existe déjà."); return; }
     const price = fp.price === "" ? 0 : agR2(fp.price);
     if (price < 0) { showToast("Le prix de vente ne peut pas être négatif."); return; }
     ajouter({ type: "prod", id: agId(), name, unit: fp.unit.trim(), price, cat: fp.cat || "autre", desc: (fp.desc || "").trim(), photo: fp.photo || "", active: true });
@@ -1091,12 +1095,22 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
   const [selCamp, setSelCamp] = useState("");
   const [fcu, setFcu] = useState({ matId: "", qty: "", date: todayStr() });
   const [fre, setFre] = useState({ qty: "", date: todayStr(), note: "" });
+  const [errParc, setErrParc] = useState("");
+  const retirerParcelle = (p) => {
+    if (!canEdit) return;
+    if (camps.some((c) => c.parcId === p.id)) { showToast("Cette parcelle a des campagnes : elle ne peut pas être retirée."); return; }
+    setAgri((prev) => (prev || []).filter((r) => !(r && r.type === "parc" && r.id === p.id)));
+    agriRef.current = agriRef.current.filter((r) => !(r && r.type === "parc" && r.id === p.id));
+    showToast("Parcelle « " + p.name + " » retirée."); logAudit("Agriculture et élevage", "Parcelle retirée", p.name);
+  };
   const ajouterParcelle = () => {
     if (!canEdit) return;
     const name = fpa.name.trim();
-    if (!name) { showToast("Indiquez le nom de la parcelle (ex. Champ du bas, Parcelle 3)."); return; }
-    if (parcs.some((p) => agNom(p.name) === agNom(name))) { showToast("Une parcelle de ce nom existe déjà."); return; }
-    if (fpa.area !== "" && !(Number(fpa.area) > 0)) { showToast("La superficie doit être supérieure à zéro."); return; }
+    const refus = (m) => { setErrParc(m); showToast(m); };
+    if (!name) { refus("Indiquez le nom de la parcelle (ex. Champ du bas, Parcelle 3)."); return; }
+    if (lignesAJour("parc").some((p) => agNom(p.name) === agNom(name))) { refus("Refusé : une parcelle « " + name + " » existe déjà (les majuscules et les accents ne comptent pas). Choisissez un autre nom."); return; }
+    if (fpa.area !== "" && !(Number(fpa.area) > 0)) { refus("La superficie doit être supérieure à zéro."); return; }
+    setErrParc("");
     ajouter({ type: "parc", id: agId(), name, area: fpa.area === "" ? 0 : agQ(fpa.area), unit: fpa.unit, place: fpa.place.trim(), active: true });
     setFpa({ ...fpa, name: "", area: "", place: "" }); showToast("Parcelle « " + name + " » ajoutée."); logAudit("Agriculture et élevage", "Parcelle ajoutée", name);
   };
@@ -1139,12 +1153,13 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
         {canEdit && (<div className="grid md:grid-cols-2 gap-4 mb-5">
           <div className="ec-card p-4" data-testid="ag-parc-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle parcelle</div>
             <div className="grid grid-cols-2 gap-2 items-end">
-              <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom (Champ du bas, Parcelle 3…)</label><input value={fpa.name} onChange={(e) => setFpa({ ...fpa, name: e.target.value })} data-testid="ag-parc-nom" className={ecInput} style={ecBorder} /></div>
+              <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom (Champ du bas, Parcelle 3…)</label><input value={fpa.name} onChange={(e) => { setErrParc(""); setFpa({ ...fpa, name: e.target.value }); }} data-testid="ag-parc-nom" className={ecInput} style={ecBorder} /></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Superficie (facultatif)</label><input type="number" min="0" step="0.01" value={fpa.area} onChange={(e) => setFpa({ ...fpa, area: e.target.value })} data-testid="ag-parc-surface" className={ecInput + " tabular"} style={ecBorder} /></div>
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Unité</label><select value={fpa.unit} onChange={(e) => setFpa({ ...fpa, unit: e.target.value })} data-testid="ag-parc-unite" className={ecInput} style={ecBorder}>{unites.map((u) => <option key={u} value={u}>{u}</option>)}</select></div>
               <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Lieu (facultatif)</label><input value={fpa.place} onChange={(e) => setFpa({ ...fpa, place: e.target.value })} data-testid="ag-parc-lieu" className={ecInput} style={ecBorder} /></div>
             </div>
-            <button onClick={ajouterParcelle} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ag-parc-ajouter">Ajouter la parcelle</button></div>
+            <button onClick={ajouterParcelle} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ag-parc-ajouter">Ajouter la parcelle</button>
+            {errParc && <div className="mt-2 px-3 py-2 rounded text-sm" style={{ background: "#FBE9E5", color: "#A6432F" }} data-testid="ag-parc-erreur">{errParc}</div>}</div>
           <div className="ec-card p-4" data-testid="ag-camp-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle campagne (une saison sur une parcelle)</div>
             <div className="grid grid-cols-2 gap-2 items-end">
               <div className="col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom (Maïs printemps 2026…)</label><input value={fca.name} onChange={(e) => setFca({ ...fca, name: e.target.value })} data-testid="ag-camp-nom" className={ecInput} style={ecBorder} /></div>
@@ -1161,7 +1176,10 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
               <td>{c.status === "encours" ? ecPastille("En cours", "attente") : c.status === "cloturee" ? ecPastille("Clôturée", "ok") : ecPastille("Annulée", "neutre")}</td>
               <td className="text-right"><button onClick={() => setSelCamp(c.id === selCamp ? "" : c.id)} className="text-xs underline" data-testid="ag-camp-ouvrir">{c.id === selCamp ? "Fermer" : "Ouvrir"}</button></td></tr>); })}</tbody></table>
           {camps.length === 0 && <div className="text-sm mt-2" style={{ color: "#8A8370" }}>Aucune campagne. Créez d'abord une parcelle et un produit, puis ouvrez une campagne.</div>}</div>
-        {parcs.length > 0 && <div className="text-xs mt-3" style={{ color: "#5B563F" }} data-testid="ag-parc-liste">Parcelles : {parcs.map((p) => p.name + (p.area ? " (" + p.area + " " + p.unit + ")" : "")).join(" · ")}</div>}
+        {parcs.length > 0 && (<div className="ec-card p-4 mt-4" data-testid="ag-parc-liste">
+          <div className="display text-base mb-1" style={{ color: "#152238" }}>Mes parcelles ({parcs.length})</div>
+          {parcs.map((p, i) => (<div key={p.id} data-testid="ag-parc-ligne" className="py-1.5 text-sm" style={{ borderTop: i > 0 ? "1px solid #F3EFE3" : "none", overflowWrap: "anywhere" }}><b>{p.name}</b>{p.area ? " — " + p.area + " " + p.unit : ""}{p.place ? " — " + p.place : ""}<span className="text-xs" style={{ color: "#8A8370" }}> · {camps.filter((c) => c.parcId === p.id).length} campagne(s)</span>{canEdit && !camps.some((c) => c.parcId === p.id) && <button className="text-xs underline ml-2" style={{ color: "#A6432F" }} onClick={() => retirerParcelle(p)} data-testid="ag-parc-retirer">Retirer</button>}</div>))}
+        </div>)}
         {c0 && (<div className="ec-card p-4 mt-5" data-testid="ag-camp-detail">
           <div className="display text-lg mb-1" style={{ color: "#152238" }}>{c0.number} — {c0.name}</div>
           <div className="text-sm mb-3" style={{ color: "#5B563F" }}>Coût : intrants <b className="tabular">{fmt(coutCamp(c0).u)}</b> + frais imputés <b className="tabular">{fmt(coutCamp(c0).f)}</b> = <b className="tabular" data-testid="ag-camp-d-cout">{fmt(coutCamp(c0).total)}</b>. Pour imputer une dépense (main-d'œuvre, irrigation, transport…) à cette campagne, choisissez-la dans l'onglet Dépenses.</div>
@@ -1207,7 +1225,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     if (!canEdit) return;
     const name = fba.name.trim();
     if (!name) { showToast("Donnez un nom à la bande (ex. Poulets de chair janvier, Troupeau de chèvres)."); return; }
-    if (bandes.some((b) => agNom(b.name) === agNom(name))) { showToast("Une bande de ce nom existe déjà."); return; }
+    if (lignesAJour("bande").some((b) => agNom(b.name) === agNom(name))) { showToast("Une bande de ce nom existe déjà."); return; }
     const c0 = fba.mode === "lot" ? agQ(fba.count0) : 0;
     if (fba.mode === "lot" && !(c0 > 0)) { showToast("Indiquez l'effectif de départ (nombre d'animaux)."); return; }
     if (!verifDate(fba.start, "créer cette bande")) return;
@@ -1247,7 +1265,7 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     if (!canEdit || b.status !== "encours" || b.mode !== "individuel") return;
     const tag = fan.tag.trim();
     if (!tag) { showToast("Indiquez le repère de l'animal (nom, numéro de boucle…)."); return; }
-    if (animauxDe(b).some((a) => agNom(a.tag) === agNom(tag))) { showToast("Un animal de cette bande porte déjà ce repère."); return; }
+    if (lignesAJour("animal").filter((a) => a.bandeId === b.id).some((a) => agNom(a.tag) === agNom(tag))) { showToast("Un animal de cette bande porte déjà ce repère."); return; }
     if (fan.birth && isFutureDate(fan.birth)) { showToast("La date de naissance ne peut pas être dans le futur."); return; }
     const price = fan.origin === "achete" && fan.price !== "" ? agR2(fan.price) : 0;
     if (price < 0) { showToast("Le prix d'achat ne peut pas être négatif."); return; }
