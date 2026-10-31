@@ -43,6 +43,29 @@ const inR2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const inQ = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 const inId = () => String(uid());
 const inRows = (rows, type) => (rows || []).filter((r) => r && r.type === type);
+const IN_CATS = [["alimentaire", "Alimentaire"], ["entretien", "Entretien et cosmétiques"], ["bois", "Bois et métal"], ["couture", "Couture et art"], ["autre", "Autres produits"]];
+const IN_MOTIFS_PERTE = [["destockage", "Déstockage (produit ancien ou proche de la date limite)"], ["promo", "Promotion décidée par la direction"], ["geste", "Geste commercial (client important)"], ["erreur", "Prix ou fabrication mal calculé : à corriger"], ["autre", "Autre raison (à préciser)"]];
+const inMotifLibelle = (k, t) => (k === "autre" ? (t || "autre raison") : ((IN_MOTIFS_PERTE.find((m) => m[0] === k) || [0, ""])[1] || ""));
+// Réduit la photo d'un produit (420 px, JPEG) pour qu'elle reste légère dans la sauvegarde.
+function inRedimensionner(file, max) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("lecture"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("image"));
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL("image/jpeg", 0.72));
+      };
+      img.src = String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
 const inNom = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const inUniq = (arr) => Array.from(new Set(arr.map((x) => String(x || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 const inJours = (a, b) => (a && b ? Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000) : 0);
@@ -73,6 +96,8 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   const deps = inRows(indus, "dep");
   const ajusts = inRows(indus, "ajust");
   const cfg = inRows(indus, "config")[0] || {};
+  const catsAll = [...IN_CATS, ...inRows(indus, "cat").map((c) => [c.id, c.label])];
+  const catDe = (p) => (catsAll.some((c) => c[0] === p.cat) ? p.cat : "autre");
   const tcaOn = !!cfg.tcaOn;
   const tcaRate = tcaOn ? Number(settings.taxRate) || 0 : 0;
   const nomClient = (id) => (clients.find((x) => x.id === id) || {}).name || "Client de passage";
@@ -115,6 +140,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   // coût de revient moyen d'une unité du produit (moyenne des lots fabriqués : matières + main-d'œuvre + frais) ; 0 = pas encore de lot
   const coutUnit = (id) => { const ls = lotsOk.filter((l) => l.productId === id); const q = ls.reduce((s2, l) => s2 + l.qty, 0); return q > 0 ? inR2(ls.reduce((s2, l) => s2 + coutLot(l).total, 0) / q) : 0; };
   const etatCmd = (c) => (IN_ETATS_CMD.find((e) => e[0] === c.status) || [0, c.status])[1];
+  const [nouvCat, setNouvCat] = useState("");
   const [imprimer, setImprimer] = useState(null); // { kind: "devis" | "facture" | "lot", id }
   const [tk, setTk] = useState(false);
   const [selCmd, setSelCmd] = useState("");
@@ -301,9 +327,14 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   };
 
   // ───────── Produits et recettes ─────────
-  const [fp, setFp] = useBrouillon("indus-produit", { name: "", unit: "", price: "" });
+  const [fp, setFp] = useBrouillon("indus-produit", { name: "", unit: "", price: "", cat: "", desc: "", photo: "" });
   const [pq, setPq] = useState("");
   const [fr, setFr] = useState({ outQty: "", matId: "", qty: "" });
+  const choisirPhoto = async (e, prodId) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try { const url = await inRedimensionner(f, 420); if (prodId) maj(prodId, (r) => ({ ...r, photo: url })); else setFp((x) => ({ ...(x || {}), photo: url })); showToast("Photo ajoutée (réduite à 420 px pour rester légère)."); }
+    catch (err) { showToast("Cette image n'a pas pu être lue. Essayez un fichier JPG ou PNG."); }
+  };
   const ajouterProd = () => {
     if (!canEdit) return;
     const name = fp.name.trim();
@@ -312,9 +343,18 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     if (prods.some((p) => inNom(p.name) === inNom(name))) { showToast("Un produit de ce nom existe déjà."); return; }
     const price = fp.price === "" ? 0 : inR2(fp.price);
     if (price < 0) { showToast("Le prix de vente ne peut pas être négatif."); return; }
-    ajouter({ type: "prod", id: inId(), name, unit: fp.unit.trim(), price, active: true });
-    setFp({ name: "", unit: "", price: "" });
+    ajouter({ type: "prod", id: inId(), name, unit: fp.unit.trim(), price, cat: fp.cat || "autre", desc: (fp.desc || "").trim(), photo: fp.photo || "", active: true });
+    setFp({ name: "", unit: "", price: "", cat: fp.cat || "", desc: "", photo: "" });
     showToast("Produit « " + name + " » ajouté."); logAudit("Industries", "Produit ajouté", name);
+  };
+  const [npx, setNpx] = useState("");
+  const redresserPrix = (p, cu) => {
+    if (!canEdit) return;
+    const prix = npx === "" ? Math.ceil(cu) : inR2(npx);
+    if (!(prix > 0)) { showToast("Indiquez un prix supérieur à zéro."); return; }
+    maj(p.id, (r) => ({ ...r, price: prix, prixRedresseLe: todayStr() }));
+    setNpx(""); showToast("Prix de « " + p.name + " » : " + fmt(prix) + (prix + 0.004 < cu ? " (encore sous le coût de revient)." : "."));
+    logAudit("Industries", "Prix redressé", p.name + " : " + fmt(Number(p.price) || 0) + " → " + fmt(prix) + " (coût moyen " + fmt(cu) + ")");
   };
   const recetteDe = (id) => recettes.find((r) => r.productId === id);
   const ajouterLigneRecette = (p) => {
@@ -344,6 +384,9 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom du produit</label><input value={fp.name} onChange={(e) => setFp({ ...fp, name: e.target.value })} data-testid="in-prod-nom" className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Unité de vente</label><input list="in-dl-unit" value={fp.unit} onChange={(e) => setFp({ ...fp, unit: e.target.value })} data-testid="in-prod-unite" className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Prix de vente (facultatif)</label><input type="number" min="0" step="0.01" value={fp.price} onChange={(e) => setFp({ ...fp, price: e.target.value })} data-testid="in-prod-prix" className={ecInput + " tabular"} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Catégorie du catalogue</label><select value={fp.cat || ""} onChange={(e) => setFp({ ...fp, cat: e.target.value })} data-testid="in-prod-cat" className={ecInput} style={ecBorder}><option value="">— choisir —</option>{catsAll.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Description courte (facultatif)</label><input value={fp.desc || ""} onChange={(e) => setFp({ ...fp, desc: e.target.value })} data-testid="in-prod-desc" className={ecInput} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Photo (facultatif)</label><div className="flex items-center gap-2"><input type="file" accept="image/*" onChange={(e) => choisirPhoto(e, "")} data-testid="in-prod-photo" className="text-xs" style={{ maxWidth: 170 }} />{fp.photo && <img src={fp.photo} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6 }} data-testid="in-prod-photo-apercu" />}</div></div>
           </div>
           <button onClick={ajouterProd} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="in-prod-ajouter">Ajouter le produit</button></div>)}
         <div className="mb-2"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (nom, unité)</label><input value={pq} onChange={(e) => setPq(e.target.value)} data-testid="in-prod-recherche" className={ecInput} style={ecBorder} /></div>
@@ -358,6 +401,19 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Prix de vente</label><input type="number" min="0" step="0.01" value={p.price || 0} disabled={!canEdit} onChange={(e) => maj(p.id, (r) => ({ ...r, price: Math.max(0, inR2(e.target.value)) }))} data-testid="in-prod-d-prix" className={ecInput + " tabular"} style={ecBorder} /></div>
             <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={p.active !== false} disabled={!canEdit} onChange={(e) => maj(p.id, (r) => ({ ...r, active: e.target.checked }))} data-testid="in-prod-actif" />Produit fabriqué (décochez si arrêté)</label>
           </div>
+          <div className="grid md:grid-cols-3 gap-2 mb-3 items-end">
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Catégorie du catalogue</label><select value={catDe(p)} disabled={!canEdit} onChange={(e) => maj(p.id, (r) => ({ ...r, cat: e.target.value }))} data-testid="in-prod-d-cat" className={ecInput} style={ecBorder}>{catsAll.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Description courte</label><input value={p.desc || ""} disabled={!canEdit} onChange={(e) => maj(p.id, (r) => ({ ...r, desc: e.target.value }))} data-testid="in-prod-d-desc" className={ecInput} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Photo</label><div className="flex items-center gap-2">{canEdit && <input type="file" accept="image/*" onChange={(e) => choisirPhoto(e, p.id)} data-testid="in-prod-d-photo" className="text-xs" style={{ maxWidth: 170 }} />}{p.photo && <img src={p.photo} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6 }} />}{canEdit && p.photo && <button onClick={() => maj(p.id, (r) => ({ ...r, photo: "" }))} className="text-xs" style={{ color: "#A6432F" }}>Retirer</button>}</div></div>
+          </div>
+          {canEdit && coutUnit(p.id) > 0 && (() => { const cu = coutUnit(p.id), pr = Number(p.price) || 0, sous = pr > 0 && pr + 0.004 < cu, conseil = Math.ceil(cu); return (
+            <div className="p-3 rounded mb-3 text-sm" style={{ background: sous ? "#FBE9E4" : "#F4F1E6", color: sous ? "#7A2E1F" : "#5B563F" }} data-testid="in-prod-redress">
+              <div>Coût de revient moyen : <b className="tabular" data-testid="in-prod-d-cout">{fmt(cu)}</b> par {p.unit} · prix de vente : <b className="tabular">{pr > 0 ? fmt(pr) : "non fixé"}</b>{pr > 0 && <> · {sous ? <b>perte de {fmt(inR2(cu - pr))} par {p.unit}</b> : <>marge {fmt(inR2(pr - cu))} ({Math.round((pr - cu) * 100 / pr)} %)</>}</>}</div>
+              {sous && <div className="mt-1">Le prix est <b>inférieur au coût</b> : chaque vente creuse le déficit. Redressez le prix, ou vérifiez les lots (matières ou heures surévaluées ?).</div>}
+              <div className="flex flex-wrap items-end gap-2 mt-2"><div><label className="text-xs" style={{ color: "#8A8370" }}>Nouveau prix de vente (au moins {fmt(conseil)} pour couvrir le coût)</label><input type="number" min="0" step="0.01" value={npx} placeholder={String(conseil)} onChange={(e) => setNpx(e.target.value)} data-testid="in-prod-redress-prix" className={ecInput + " tabular"} style={ecBorder} /></div>
+                <button onClick={() => redresserPrix(p, cu)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="in-prod-redress-ok">Enregistrer le nouveau prix</button>
+                <button onClick={() => setTab("production")} className="px-3 py-2 rounded text-sm" style={ecBtn}>Voir les lots</button></div>
+            </div>); })()}
           <div className="display text-base mb-2" style={{ color: "#152238" }}>Recette (matières pour une fabrication)</div>
           <div className="text-xs mb-2" style={{ color: "#8A8370" }}>La recette prépare la saisie d'un lot : vous pourrez toujours corriger les quantités réellement utilisées. Le coût estimé utilise le prix moyen d'achat de chaque matière.</div>
           {rec && (<div className="text-sm mb-2" data-testid="in-rec-resume">Une fabrication donne <b>{rec.outQty}</b> {p.unit} — coût estimé des matières : <b className="tabular" data-testid="in-rec-cout">{fmt(coutRecette(rec))}</b>{rec.outQty > 0 ? " (soit " + fmt(inR2(coutRecette(rec) / rec.outQty)) + " par " + p.unit + ")" : ""}</div>)}
@@ -499,7 +555,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     inAjouterComptes(accounts, setAccounts, ["411", "701", ...(tca > 0 ? ["445"] : []), ...(recup > 0 ? ["4191"] : [])]);
     const number = numero("FA", facts, date);
     const e = ecrire(date, "Facture " + number + " — " + nomClient(clientId), [{ account: "411", debit: net, credit: 0 }, { account: "4191", debit: recup, credit: 0 }, { account: "701", debit: 0, credit: ht }, { account: "445", debit: 0, credit: tca }], clientId || "passage");
-    const f = { type: "fact", id: inId(), number, date, dueDate: date, clientId: clientId || "", orderId: orderId || "", lines: lines.map((l) => ({ id: inId(), label: l.label, productId: l.productId || "", service: !!l.service, perte: !!l.perte, unit: l.unit || "", qty: l.qty, pu: l.pu })), ht, tcaRate, tca, ttc, recup, net, entryId: e.id, payments: [], status: "emise", by: currentUserEmail || "" };
+    const f = { type: "fact", id: inId(), number, date, dueDate: date, clientId: clientId || "", orderId: orderId || "", lines: lines.map((l) => ({ id: inId(), label: l.label, productId: l.productId || "", service: !!l.service, perte: !!l.perte, motif: l.motif || "", motifTxt: l.motifTxt || "", unit: l.unit || "", qty: l.qty, pu: l.pu })), ht, tcaRate, tca, ttc, recup, net, entryId: e.id, payments: [], status: "emise", by: currentUserEmail || "" };
     if (payNow && net > 0) {
       const cpt = compteMode(payMode === "banque" ? "banque" : "caisse");
       inAjouterComptes(accounts, setAccounts, [cpt]);
@@ -509,7 +565,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     ajouter(f);
     if (cmd) { maj(cmd.id, (c) => ({ ...c, status: "livree", factId: f.id, acomptes: (c.acomptes || []).map((a) => (a.status !== "annulé" && !a.imputed ? { ...a, imputed: true } : a)) })); }
     showToast("Facture " + number + " émise : " + fmt(ttc) + "." + (f.lines.some((l) => l.perte) ? " Attention : cette facture contient une vente à perte." : "")); logAudit("Industries", "Facture émise", number + " — " + fmt(ttc));
-    if (f.lines.some((l) => l.perte)) logAudit("Industries", "Vente à perte", number + " — " + f.lines.filter((l) => l.perte).map((l) => l.label).join(", "));
+    if (f.lines.some((l) => l.perte)) logAudit("Industries", "Vente à perte", number + " — " + f.lines.filter((l) => l.perte).map((l) => l.label + " (" + inMotifLibelle(l.motif, l.motifTxt) + ")").join(" ; "));
     return f;
   };
   const [pf, setPf] = useBrouillon("indus-paiement", { amount: "", mode: "caisse", date: todayStr() });
@@ -545,24 +601,70 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     showToast("Facture annulée.");
   };
 
+  // ───────── Catalogue (cartes illustrées, comme la carte de la Restauration) ─────────
+  const addCatI = () => {
+    if (!canEdit) return;
+    const label = nouvCat.trim();
+    if (!label) { showToast("Donnez un nom à la catégorie (ex. Savons, Meubles, Robes)."); return; }
+    if (catsAll.some((c) => inNom(c[1]) === inNom(label))) { showToast("Cette catégorie existe déjà."); return; }
+    ajouter({ type: "cat", id: "c" + inId(), label });
+    setNouvCat(""); showToast("Catégorie « " + label + " » ajoutée.");
+  };
+  const cartes = (mode) => {
+    const actifs = prods.filter((p) => mode === "catalogue" || p.active !== false);
+    return (<div>{catsAll.map(([ck, cl]) => { const liste = actifs.filter((p) => catDe(p) === ck); return liste.length ? (
+      <div key={ck} className="mb-5" data-testid="in-cat-groupe"><div className="display text-base" style={{ color: "#152238" }}>{cl}</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">{liste.map((p) => {
+          const st = stockProd(p.id), rupture = st <= 0, cu = coutUnit(p.id), pr = Number(p.price) || 0, sous = canEdit && cu > 0 && pr > 0 && pr + 0.004 < cu;
+          return (<div key={p.id} className="ec-card p-3" data-testid="in-cat-carte" style={{ opacity: (rupture && mode === "vente") || p.active === false ? 0.55 : 1 }}>
+            <div className="flex gap-3">
+              {p.photo ? <img src={p.photo} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} /> : <div style={{ width: 72, height: 72, borderRadius: 8, background: "#F4F1E6", color: "#9A7B1E", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, flexShrink: 0 }}>{p.name.charAt(0).toUpperCase()}</div>}
+              <div style={{ minWidth: 0 }}><div className="font-semibold text-sm">{p.name}</div>{p.desc && <div className="text-xs" style={{ color: "#7A7460" }}>{p.desc}</div>}
+                <div className="tabular text-sm mt-1" data-testid="in-cat-prix">{pr > 0 ? fmt(pr) : "prix à fixer"} <span className="text-xs" style={{ color: "#8A8370" }}>/ {p.unit}</span></div>
+                <div className="text-xs" data-testid="in-cat-stock" style={{ color: rupture ? "#A6432F" : "#5B563F" }}>{rupture ? "Rupture" : st + " " + p.unit + " disponible" + (st > 1 ? "s" : "")}</div>
+                {p.active === false && <div className="text-xs" style={{ color: "#8A8370" }}>Retiré du catalogue</div>}
+                {mode === "catalogue" && canEdit && cu > 0 && <div className="text-xs" style={{ color: sous ? "#A6432F" : "#8A8370" }}>coût moyen {fmt(cu)}{pr > 0 ? (sous ? " · prix sous le coût" : " · marge " + Math.round((pr - cu) * 100 / pr) + " %") : ""}</div>}
+                {mode !== "catalogue" && sous && <div className="text-xs" style={{ color: "#A6432F" }}>Prix sous le coût de revient</div>}</div>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2 text-xs">
+              {mode === "vente" && !rupture && canFront && <><button onClick={() => ajouterRapide(p)} className="px-2 py-1 rounded" style={ecBtnGold} data-testid="in-cat-plus1">+ 1</button><button onClick={() => choisirProduitVente(p.id)} className="underline" data-testid="in-vte-cat-choisir">Choisir</button></>}
+              {mode === "commande" && canFront && <button onClick={() => choisirProduitLigne(p.id)} className="underline" data-testid="in-cmd-cat-choisir">Choisir</button>}
+              {mode === "catalogue" && canEdit && <><button onClick={() => { setSelProd(p.id); setTab("produits"); }} className="underline" data-testid="in-cat-modifier">Modifier</button><button onClick={() => maj(p.id, (r) => ({ ...r, active: r.active === false }))} className="underline" data-testid="in-cat-retirer">{p.active === false ? "Remettre au catalogue" : "Retirer du catalogue"}</button></>}
+            </div>
+          </div>); })}</div></div>) : null; })}
+      {actifs.length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun produit : créez-les dans « Produits et recettes ».</div>}</div>);
+  };
+  const Catalogue = () => (
+    <div>
+      <div className="ec-card p-4 mb-5" data-testid="in-catalogue-entete">
+        <div className="text-sm mb-2" style={{ color: "#5B563F" }}>Votre vitrine : les produits finis, rangés par catégorie, avec photo, prix et stock disponible. Les produits se créent dans « Produits et recettes » ; ici vous les présentez et les vendez.</div>
+        <div className="flex flex-wrap items-end gap-2">
+          {canEdit && <><div><label className="text-xs" style={{ color: "#8A8370" }}>Nouvelle catégorie (ex. Savons, Meubles, Robes)</label><input value={nouvCat} onChange={(e) => setNouvCat(e.target.value)} data-testid="in-cat-nom" className={ecInput} style={{ ...ecBorder, minWidth: 220 }} /></div><button onClick={addCatI} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="in-cat-ajouter">Ajouter la catégorie</button></>}
+          <button onClick={() => setImprimer({ kind: "catalogue" })} className="px-3 py-2 rounded text-sm ml-auto" style={ecBtn} data-testid="in-catalogue-apercu">Aperçu du catalogue pour les clients</button>
+        </div>
+      </div>
+      {cartes("catalogue")}
+    </div>
+  );
   // ───────── Commandes ─────────
   const cmdVide = () => ({ clientId: "", kind: "serie", subject: "", due: "", lines: [], productId: "", label: "", unit: "", qty: "", pu: "" });
   const [fc, setFc] = useBrouillon("indus-commande", cmdVide());
   const [perteAl, setPerteAl] = useState(null); // alerte « prix inférieur au coût de revient » : { ou, label, pu, cu } — à confirmer
-  const [confPerte, setConfPerte] = useState(""); // commande dont la facturation à perte attend une confirmation
+  const [confPerte, setConfPerte] = useState(""); const [motifCmd, setMotifCmd] = useState({ motif: "", txt: "" }); // commande dont la facturation à perte attend une confirmation
   const [cqq, setCqq] = useState(""); const [cet, setCet] = useState("");
   const [ac, setAc] = useState({ amount: "", mode: "caisse", date: todayStr() });
   const choisirProduitLigne = (id) => { const p = prods.find((x) => x.id === id); setFc({ ...fc, productId: id, label: p ? p.name : fc.label, unit: p ? p.unit : fc.unit, pu: p && p.price ? String(p.price) : fc.pu }); };
-  const ajouterLigneCmd = (forcer) => {
-    const qty = inQ(fc.qty), pu = inR2(fc.pu);
-    if (!fc.label.trim()) { showToast("Indiquez la désignation (ou choisissez un produit)."); return; }
+  const ajouterCandCmd = (cand, forcer) => {
+    const qty = inQ(cand.qty), pu = inR2(cand.pu);
+    if (!String(cand.label || "").trim()) { showToast("Indiquez la désignation (ou choisissez un produit)."); return; }
     if (!(qty > 0)) { showToast("La quantité doit être supérieure à zéro."); return; }
-    if (fc.pu === "" || pu < 0) { showToast("Indiquez le prix unitaire (en gourdes)."); return; }
-    const cu = fc.productId ? coutUnit(fc.productId) : 0, perte = cu > 0 && pu + 0.004 < cu;
-    if (perte && forcer !== true) { setPerteAl({ ou: "cmd", label: fc.label.trim(), pu, cu }); return; }
+    if (cand.pu === "" || pu < 0) { showToast("Indiquez le prix unitaire (en gourdes)."); return; }
+    const cu = cand.productId ? coutUnit(cand.productId) : 0, perte = cu > 0 && pu + 0.004 < cu;
+    if (perte && !forcer) { setPerteAl({ ou: "cmd", label: String(cand.label).trim(), pu, cu, cand, motif: "", txt: "" }); return; }
     setPerteAl(null);
-    setFc({ ...fc, lines: [...fc.lines, { id: inId(), label: fc.label.trim(), productId: fc.productId, unit: fc.unit.trim(), qty, pu, perte }], productId: "", label: "", unit: "", qty: "", pu: "" });
+    setFc({ ...fc, lines: [...fc.lines, { id: inId(), label: String(cand.label).trim(), productId: cand.productId || "", unit: String(cand.unit || "").trim(), qty, pu, perte, motif: perte ? forcer.motif : "", motifTxt: perte ? forcer.txt : "" }], productId: "", label: "", unit: "", qty: "", pu: "" });
   };
+  const ajouterLigneCmd = (forcer) => ajouterCandCmd({ productId: fc.productId, label: fc.label, unit: fc.unit, qty: fc.qty, pu: fc.pu }, forcer);
   const creerCommande = () => {
     if (!canFront) return;
     if (!fc.clientId) { showToast("Choisissez le client (créez-le d'abord dans l'onglet Clients)."); return; }
@@ -604,11 +706,16 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   const facturerCommande = (c) => {
     if (!canFront || c.status === "annulee" || c.status === "livree") return;
     if (c.status === "devis") { showToast("Confirmez d'abord la commande (accord du client)."); return; }
-    const coutC = inR2(lotsOk.filter((l) => l.orderId === c.id).reduce((s2, l) => s2 + coutLot(l).total, 0)), htC = inMontantLignes(c.lines);
-    if (coutC > 0 && coutC > htC + 0.004 && confPerte !== c.id) { setConfPerte(c.id); showToast("Attention : le coût de revient des lots (" + fmt(coutC) + ") dépasse le montant à facturer (" + fmt(htC) + "). Cliquez de nouveau pour facturer quand même."); return; }
+    const coutC = inR2(lotsOk.filter((l) => l.orderId === c.id).reduce((s2, l) => s2 + coutLot(l).total, 0)), htC = inMontantLignes(c.lines), perteC = coutC > 0 && coutC > htC + 0.004;
+    if (perteC && confPerte !== c.id) { setConfPerte(c.id); setMotifCmd({ motif: "", txt: "" }); showToast("Attention : le coût de revient des lots (" + fmt(coutC) + ") dépasse le montant à facturer (" + fmt(htC) + "). Justifiez la raison pour facturer quand même."); return; }
+    if (perteC) {
+      if (isVendeur || !canEdit) { showToast("Seul un gestionnaire peut autoriser une facturation à perte."); return; }
+      if (!motifCmd.motif) { showToast("Choisissez la raison de cette vente à perte."); return; }
+      if (motifCmd.motif === "autre" && !motifCmd.txt.trim()) { showToast("Précisez la raison de cette vente à perte."); return; }
+    }
     setConfPerte("");
     const f = emettreFacture({ orderId: c.id, clientId: c.clientId, date: today, lines: c.lines, payNow: false });
-    if (f && coutC > htC + 0.004) logAudit("Industries", "Vente à perte", f.number + " — coût " + fmt(coutC) + " pour " + fmt(htC) + " facturés");
+    if (f && perteC) { maj(f.id, (r) => ({ ...r, perteMotif: motifCmd.motif, perteTxt: motifCmd.txt.trim(), perteCout: coutC })); logAudit("Industries", "Vente à perte", f.number + " — coût " + fmt(coutC) + " pour " + fmt(htC) + " facturés — " + inMotifLibelle(motifCmd.motif, motifCmd.txt.trim())); }
   };
   const cmdHt = (c) => inMontantLignes(c.lines);
   const Commandes = () => {
@@ -628,6 +735,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
           {fc.lines.length > 0 && (<div className="ec-wrap mt-3"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Désignation</th><th>Unité</th><th className="text-right">Quantité</th><th className="text-right">Prix unitaire</th><th className="text-right">Montant</th><th></th></tr></thead>
             <tbody>{fc.lines.map((l) => (<tr key={l.id} data-testid="in-cmd-lignebrouillon"><td className="py-1.5">{l.label}</td><td>{l.unit || "—"}</td><td className="text-right tabular">{l.qty}</td><td className="text-right tabular">{fmt(l.pu)}</td><td className="text-right tabular">{fmt(inR2(l.qty * l.pu))}</td><td className="text-right"><button onClick={() => setFc({ ...fc, lines: fc.lines.filter((x) => x.id !== l.id) })} className="text-xs underline">Retirer</button></td></tr>))}</tbody>
             <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={4}>Total hors taxe</td><td className="text-right tabular" data-testid="in-cmd-brouillon-total">{fmt(inMontantLignes(fc.lines))}</td><td></td></tr></tfoot></table></div>)}
+          {prods.length > 0 && <details className="mt-2" data-testid="in-cmd-catalogue"><summary className="text-sm cursor-pointer" style={{ color: "#152238" }}>Ouvrir le catalogue (photos, prix, stock)</summary><div className="mt-2">{cartes("commande")}</div></details>}
           <div className="grid md:grid-cols-6 gap-2 items-end mt-2">
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Produit de la gamme (ou texte libre à droite)</label><select value={fc.productId} onChange={(e) => choisirProduitLigne(e.target.value)} data-testid="in-cmd-produit" className={ecInput} style={ecBorder}><option value="">— texte libre —</option>{prods.filter((x) => x.active !== false).map((x) => <option key={x.id} value={x.id}>{x.name} (stock {stockProd(x.id)})</option>)}</select></div>
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Désignation</label><input value={fc.label} onChange={(e) => setFc({ ...fc, label: e.target.value, productId: fc.productId && prods.find((p) => p.id === fc.productId && p.name === e.target.value) ? fc.productId : "" })} data-testid="in-cmd-designation" className={ecInput} style={ecBorder} /></div>
@@ -635,8 +743,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Prix unitaire</label><input type="number" min="0" step="0.01" value={fc.pu} onChange={(e) => setFc({ ...fc, pu: e.target.value })} data-testid="in-cmd-pu" className={ecInput + " tabular"} style={ecBorder} /></div>
           </div>
           <div className="flex flex-wrap gap-2 mt-2"><button onClick={() => ajouterLigneCmd()} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="in-cmd-ajouter-ligne">Ajouter la ligne</button><button onClick={creerCommande} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="in-cmd-creer">Enregistrer la commande</button></div>
-          {perteAl && perteAl.ou === "cmd" && (<div className="p-3 rounded text-sm mt-2" style={{ background: "#FBE9E4", color: "#7A2E1F" }} data-testid="in-cmd-perte">Attention : « {perteAl.label} » est proposé à <b>{fmt(perteAl.pu)}</b> alors que son coût de revient moyen est de <b>{fmt(perteAl.cu)}</b> : vous perdez <b>{fmt(inR2(perteAl.cu - perteAl.pu))}</b> par unité. Vérifiez le prix, ou la fabrication a peut-être été mal calculée.
-            <div className="flex flex-wrap gap-2 mt-2"><button onClick={() => ajouterLigneCmd(true)} className="px-3 py-1.5 rounded text-xs" style={ecBtn} data-testid="in-cmd-perte-confirmer">Ajouter quand même (à perte)</button><button onClick={() => setPerteAl(null)} className="px-3 py-1.5 rounded text-xs" style={ecBtn}>Corriger le prix</button></div></div>)}</div>)}
+          {alertePerte("cmd")}</div>)}
         <div className="flex flex-wrap gap-2 items-end mb-2">
           <div className="flex-1 min-w-[150px]"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (n°, client, objet)</label><input value={cqq} onChange={(e) => setCqq(e.target.value)} data-testid="in-cmd-recherche" className={ecInput} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>État</label><select value={cet} onChange={(e) => setCet(e.target.value)} data-testid="in-cmd-filtre-etat" className={ecInput} style={ecBorder}><option value="">Tous</option>{IN_ETATS_CMD.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
@@ -660,6 +767,9 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
             {canFront && (c0.status === "confirmee" || c0.status === "enprod" || c0.status === "prete") && <button onClick={() => facturerCommande(c0)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="in-cmd-facturer">{confPerte === c0.id ? "Facturer quand même (à perte)" : "Livrer et facturer"}</button>}
             {canEdit && c0.status !== "livree" && c0.status !== "annulee" && <button onClick={() => annulerCommande(c0)} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="in-cmd-annuler">Annuler la commande</button>}
           </div>
+          {confPerte === c0.id && (<div className="p-3 rounded text-sm mb-3" style={{ background: "#FBE9E4", color: "#7A2E1F" }} data-testid="in-cmd-fact-perte">Le coût de revient des lots liés dépasse le montant facturé : facturer, c'est vendre à perte.
+            {(isVendeur || !canEdit) ? <div className="mt-1">Seul un gestionnaire peut l'autoriser.</div> : (<div className="grid md:grid-cols-3 gap-2 mt-2 items-end"><div className="md:col-span-2"><label className="text-xs">Raison (obligatoire)</label><select value={motifCmd.motif} onChange={(e) => setMotifCmd({ ...motifCmd, motif: e.target.value })} data-testid="in-cmd-fact-motif" className={ecInput} style={ecBorder}><option value="">— choisir la raison —</option>{IN_MOTIFS_PERTE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>{motifCmd.motif === "autre" && <div><label className="text-xs">Précisez</label><input value={motifCmd.txt} onChange={(e) => setMotifCmd({ ...motifCmd, txt: e.target.value })} className={ecInput} style={ecBorder} /></div>}</div>)}
+            <div className="mt-2"><button onClick={() => setConfPerte("")} className="px-3 py-1.5 rounded text-xs" style={ecBtn}>Annuler</button></div></div>)}
           {canFront && c0.status !== "devis" && c0.status !== "annulee" && c0.status !== "livree" && (<div className="mb-3"><div className="display text-base mb-2" style={{ color: "#152238" }}>Acomptes reçus</div>
             <div className="grid md:grid-cols-4 gap-2 items-end">
               <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant</label><input type="number" min="0" step="0.01" value={ac.amount} onChange={(e) => setAc({ ...ac, amount: e.target.value })} data-testid="in-ac-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
@@ -680,24 +790,45 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   const [vq, setVq] = useState(""); const [vet, setVet] = useState("");
   const etatFact = (f) => (f.status === "annulee" ? "annulee" : inSolde(f).reste <= 0.004 ? "soldee" : "encaisser");
   const choisirProduitVente = (id) => { const p = prods.find((x) => x.id === id); setPerteAl(null); setFv({ ...fv, productId: id, label: p ? p.name : (id === "__service" ? "" : fv.label), unit: p ? p.unit : fv.unit, pu: p && p.price ? String(p.price) : fv.pu }); };
-  const ajouterLigneVente = (forcer) => {
-    const qty = inQ(fv.qty), pu = inR2(fv.pu);
-    const service = fv.productId === "__service";
-    if (!service && !fv.productId) { showToast("Choisissez un produit du catalogue. Pour une prestation sans stock (réparation, livraison…), choisissez « Service ou prestation »."); return; }
-    if (!fv.label.trim()) { showToast("Choisissez un produit ou indiquez la désignation."); return; }
+  const ajouterCandVente = (cand, forcer) => {
+    const qty = inQ(cand.qty), pu = inR2(cand.pu);
+    const service = cand.productId === "__service";
+    if (!service && !cand.productId) { showToast("Choisissez un produit du catalogue. Pour une prestation sans stock (réparation, livraison…), choisissez « Service ou prestation »."); return; }
+    if (!String(cand.label || "").trim()) { showToast("Choisissez un produit ou indiquez la désignation."); return; }
     if (!(qty > 0)) { showToast("La quantité doit être supérieure à zéro."); return; }
-    if (fv.pu === "" || pu < 0) { showToast("Indiquez le prix unitaire (en gourdes)."); return; }
+    if (cand.pu === "" || pu < 0) { showToast("Indiquez le prix unitaire (en gourdes)."); return; }
     let perte = false;
     if (!service) {
-      const deja = inQ(fv.lines.filter((l) => l.productId === fv.productId).reduce((t, l) => t + l.qty, 0)), dispo = stockProd(fv.productId);
-      if (deja + qty > dispo + 0.0005) { showToast("Stock insuffisant de « " + nomProd(fv.productId) + " » : il en reste " + Math.max(0, inQ(dispo - deja)) + " " + unitProd(fv.productId) + " à vendre. Enregistrez d'abord la fabrication."); return; }
-      const cu = coutUnit(fv.productId);
+      const deja = inQ(fv.lines.filter((l) => l.productId === cand.productId).reduce((t, l) => t + l.qty, 0)), dispo = stockProd(cand.productId);
+      if (deja + qty > dispo + 0.0005) { showToast("Stock insuffisant de « " + nomProd(cand.productId) + " » : il en reste " + Math.max(0, inQ(dispo - deja)) + " " + unitProd(cand.productId) + " à vendre. Enregistrez d'abord la fabrication."); return; }
+      const cu = coutUnit(cand.productId);
       perte = cu > 0 && pu + 0.004 < cu;
-      if (perte && forcer !== true) { setPerteAl({ ou: "vte", label: fv.label.trim(), pu, cu }); return; }
+      if (perte && !forcer) { setPerteAl({ ou: "vte", label: String(cand.label).trim(), pu, cu, cand, motif: "", txt: "" }); return; }
     }
     setPerteAl(null);
-    setFv({ ...fv, lines: [...fv.lines, { id: inId(), label: fv.label.trim(), productId: service ? "" : fv.productId, service, perte, unit: fv.unit.trim(), qty, pu }], productId: "", label: "", unit: "", qty: "", pu: "" });
+    setFv({ ...fv, lines: [...fv.lines, { id: inId(), label: String(cand.label).trim(), productId: service ? "" : cand.productId, service, perte, motif: perte ? forcer.motif : "", motifTxt: perte ? forcer.txt : "", unit: String(cand.unit || "").trim(), qty, pu }], productId: "", label: "", unit: "", qty: "", pu: "" });
   };
+  const ajouterLigneVente = (forcer) => ajouterCandVente({ productId: fv.productId, label: fv.label, unit: fv.unit, qty: fv.qty, pu: fv.pu }, forcer);
+  const ajouterRapide = (p) => { if (!(Number(p.price) > 0)) { choisirProduitVente(p.id); showToast("Ce produit n'a pas de prix : indiquez-le dans le formulaire ci-dessous."); return; } ajouterCandVente({ productId: p.id, label: p.name, unit: p.unit, qty: 1, pu: p.price }); };
+  const confirmerPerte = () => {
+    if (!perteAl) return;
+    if (isVendeur || !canEdit) { showToast("Seul un gestionnaire peut autoriser une vente à perte : demandez-lui de la saisir."); return; }
+    if (!perteAl.motif) { showToast("Choisissez la raison de cette vente à perte."); return; }
+    if (perteAl.motif === "autre" && !perteAl.txt.trim()) { showToast("Précisez la raison de cette vente à perte."); return; }
+    const f = { motif: perteAl.motif, txt: perteAl.txt.trim() };
+    if (perteAl.ou === "cmd") ajouterCandCmd(perteAl.cand, f); else ajouterCandVente(perteAl.cand, f);
+  };
+  const prixDeRevient = () => {
+    if (!perteAl) return; const px = String(Math.ceil(perteAl.cu)), c = perteAl.cand;
+    if (perteAl.ou === "cmd") setFc({ ...fc, productId: c.productId, label: c.label, unit: c.unit || "", qty: String(c.qty), pu: px }); else setFv({ ...fv, productId: c.productId, label: c.label, unit: c.unit || "", qty: String(c.qty), pu: px });
+    setPerteAl(null); showToast("Prix mis au prix de revient (" + fmt(Number(px)) + ") : vérifiez-le puis ajoutez la ligne.");
+  };
+  const alertePerte = (ou) => (perteAl && perteAl.ou === ou) ? (<div className="p-3 rounded text-sm mt-2" style={{ background: "#FBE9E4", color: "#7A2E1F" }} data-testid={"in-" + (ou === "cmd" ? "cmd" : "vte") + "-perte"}>
+    Attention : « {perteAl.label} » est proposé à <b>{fmt(perteAl.pu)}</b> alors que son coût de revient moyen est de <b>{fmt(perteAl.cu)}</b> : vous perdez <b>{fmt(inR2(perteAl.cu - perteAl.pu))}</b> par unité. Une vente à perte doit rester exceptionnelle : sinon l'entreprise s'appauvrit à chaque vente. Corrigez le prix, ou justifiez.
+    {(isVendeur || !canEdit) ? <div className="mt-2" data-testid="in-perte-gestionnaire">Seul un gestionnaire peut autoriser une vente à perte. Mettez le prix de revient ou demandez-lui.</div> : (
+      <div className="grid md:grid-cols-3 gap-2 mt-2 items-end"><div className="md:col-span-2"><label className="text-xs">Raison de la vente à perte (obligatoire)</label><select value={perteAl.motif} onChange={(e) => setPerteAl({ ...perteAl, motif: e.target.value })} data-testid="in-perte-motif" className={ecInput} style={ecBorder}><option value="">— choisir la raison —</option>{IN_MOTIFS_PERTE.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+        {perteAl.motif === "autre" && <div><label className="text-xs">Précisez</label><input value={perteAl.txt} onChange={(e) => setPerteAl({ ...perteAl, txt: e.target.value })} data-testid="in-perte-motif-txt" className={ecInput} style={ecBorder} /></div>}</div>)}
+    <div className="flex flex-wrap gap-2 mt-2"><button onClick={prixDeRevient} className="px-3 py-1.5 rounded text-xs" style={ecBtnGold} data-testid={"in-" + ou + "-perte-prixrevient"}>Mettre au prix de revient ({fmt(Math.ceil(perteAl.cu))})</button>{!(isVendeur || !canEdit) && <button onClick={confirmerPerte} className="px-3 py-1.5 rounded text-xs" style={ecBtn} data-testid={"in-" + ou + "-perte-confirmer"}>{ou === "cmd" ? "Ajouter quand même (à perte)" : "Vendre quand même (à perte)"}</button>}<button onClick={() => setPerteAl(null)} className="px-3 py-1.5 rounded text-xs" style={ecBtn}>Annuler</button></div></div>) : null;
   const venteComptoir = () => {
     const f = emettreFacture({ orderId: "", clientId: fv.clientId, date: fv.date, lines: fv.lines, payNow: fv.payNow, payMode: fv.mode });
     if (f) { setFv({ ...vteVide(), mode: fv.mode, payNow: fv.payNow }); setSelFact(f.id); }
@@ -709,9 +840,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     return (
       <div>
         {canFront && (<div className="ec-card p-4 mb-5" data-testid="in-vte-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Vente directe (comptoir ou stock)</div>
-          <div className="ec-wrap mb-3"><table className="ec-table" data-testid="in-vte-catalogue"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Catalogue de vente</th><th className="text-right">Prix</th><th className="text-right">Disponible</th><th></th></tr></thead>
-            <tbody>{prods.filter((x) => x.active !== false).map((x) => { const st = stockProd(x.id); return (<tr key={x.id} data-testid="in-vte-cat-ligne" style={{ opacity: st > 0 ? 1 : 0.55, background: fv.productId === x.id ? "#E6F1EE" : undefined }}><td className="py-1.5 font-semibold">{x.name}</td><td className="text-right tabular">{x.price ? fmt(x.price) : "—"}</td><td className="text-right tabular">{st > 0 ? st + " " + x.unit : ecPastille("Rupture", "attente")}</td><td className="text-right">{st > 0 && <button onClick={() => choisirProduitVente(x.id)} className="text-xs underline" data-testid="in-vte-cat-choisir">Choisir</button>}</td></tr>); })}</tbody></table>
-            {prods.filter((x) => x.active !== false).length === 0 && <div className="text-sm" style={{ color: "#8A8370" }}>Aucun produit : créez-les dans « Produits et recettes ».</div>}</div>
+          <div className="mb-3" data-testid="in-vte-catalogue">{cartes("vente")}</div>
           <div className="grid md:grid-cols-4 gap-2 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Client (facultatif)</label><select value={fv.clientId} onChange={(e) => setFv({ ...fv, clientId: e.target.value })} data-testid="in-vte-client" className={ecInput} style={ecBorder}><option value="">Client de passage</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" max={today} value={fv.date} onChange={(e) => setFv({ ...fv, date: e.target.value })} data-testid="in-vte-date" className={ecInput} style={ecBorder} /></div>
@@ -731,8 +860,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
             {fv.payNow && <select value={fv.mode} onChange={(e) => setFv({ ...fv, mode: e.target.value })} data-testid="in-vte-mode" className={ecInput} style={{ ...ecBorder, width: "auto" }}><option value="caisse">Caisse</option><option value="banque">Banque</option></select>}
             <button onClick={venteComptoir} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="in-vte-emettre">Émettre la facture</button>
           </div>
-          {perteAl && perteAl.ou === "vte" && (<div className="p-3 rounded text-sm mt-2" style={{ background: "#FBE9E4", color: "#7A2E1F" }} data-testid="in-vte-perte">Attention : « {perteAl.label} » est vendu <b>{fmt(perteAl.pu)}</b> alors que son coût de revient moyen est de <b>{fmt(perteAl.cu)}</b> : vous perdez <b>{fmt(inR2(perteAl.cu - perteAl.pu))}</b> par unité. Vérifiez le prix, ou la fabrication a peut-être été mal calculée.
-            <div className="flex flex-wrap gap-2 mt-2"><button onClick={() => ajouterLigneVente(true)} className="px-3 py-1.5 rounded text-xs" style={ecBtn} data-testid="in-vte-perte-confirmer">Vendre quand même (à perte)</button><button onClick={() => setPerteAl(null)} className="px-3 py-1.5 rounded text-xs" style={ecBtn}>Corriger le prix</button></div></div>)}</div>)}
+          {alertePerte("vte")}</div>)}
         <div className="flex flex-wrap gap-2 items-end mb-2">
           <div className="flex-1 min-w-[150px]"><label className="text-xs" style={{ color: "#8A8370" }}>Rechercher (n° de facture, client)</label><input value={vq} onChange={(e) => setVq(e.target.value)} data-testid="in-vte-recherche" className={ecInput} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>État</label><select value={vet} onChange={(e) => setVet(e.target.value)} data-testid="in-vte-filtre-etat" className={ecInput} style={ecBorder}><option value="">Tous</option><option value="encaisser">À encaisser</option><option value="soldee">Soldée</option><option value="annulee">Annulée</option></select></div>
@@ -861,6 +989,8 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
     cmds.filter((c) => c.status === "devis").forEach((c) => { const j = inJours(c.date, today); if (j >= 7) afaire.push({ tab: "commandes", sel: c.id, nom: nomClient(c.clientId), txt: "Devis " + c.number + " sans réponse depuis " + j + " jours : relancer ou annuler" }); });
     cmds.filter((c) => c.status === "prete").forEach((c) => afaire.push({ tab: "commandes", sel: c.id, nom: nomClient(c.clientId), txt: "Commande " + c.number + " prête : à livrer et facturer" }));
     fA.filter((f) => inSolde(f).reste > 0.004 && inJours(f.date, today) > 30).forEach((f) => afaire.push({ tab: "ventes", sel: f.id, nom: nomClient(f.clientId), txt: "Facture " + f.number + " impayée depuis " + inJours(f.date, today) + " jours : reste " + fmt(inSolde(f).reste) }));
+    prods.filter((p) => p.active !== false && Number(p.price) > 0 && coutUnit(p.id) > 0 && Number(p.price) + 0.004 < coutUnit(p.id)).forEach((p) => afaire.push({ tab: "produits", sel: p.id, nom: p.name, txt: "Prix du catalogue (" + fmt(p.price) + ") sous le coût de revient (" + fmt(coutUnit(p.id)) + ") : redressez le prix ou vérifiez les lots." }));
+    prods.forEach((p) => { const n = fA.filter((f) => inJours(f.date, today) <= 30).flatMap((f) => f.lines || []).filter((l) => l.productId === p.id && l.perte).length; if (n >= 2) afaire.push({ tab: "produits", sel: p.id, nom: p.name, txt: n + " ventes à perte en 30 jours : le prix ou le coût de fabrication doit être redressé." }); });
     { const sc = fA.flatMap((f) => (f.lines || []).filter((l) => l.productId && coutUnit(l.productId) > 0 && l.pu + 0.004 < coutUnit(l.productId)).map((l) => ({ f, l }))).filter((x) => inJours(x.f.date, today) <= 30); if (sc.length > 0) afaire.push({ tab: "rapports", nom: "Ventes à perte", txt: sc.length + " vente(s) sous le coût de revient ces 30 derniers jours : vérifiez les prix ou le calcul de fabrication." }); }
     achatsOk.filter((a) => resteAchat(a) > 0.004).forEach((a) => afaire.push({ tab: "matieres", sel: a.matId, nom: a.supplier || nomMat(a.matId), txt: "Achat de " + nomMat(a.matId) + " du " + ecDateFr(a.date) + " à payer : " + fmt(resteAchat(a)) }));
     const etapes = [
@@ -933,9 +1063,9 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
         {parProd.length === 0 && <div className="text-sm mb-4" style={{ color: "#8A8370" }}>Aucune vente de produit de la gamme sur la période.</div>}
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Ventes sous le coût de revient</div>
         {sousCout.length === 0 ? <div className="text-sm mb-4" style={{ color: "#8A8370" }} data-testid="in-rap-perte-aucune">Aucune vente sous le coût de revient sur la période.</div> : (
-          <div className="ec-wrap mb-4"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Facture</th><th>Date</th><th>Produit</th><th className="text-right">Quantité</th><th className="text-right">Prix vendu</th><th className="text-right">Coût moyen</th><th className="text-right">Perte</th></tr></thead>
-            <tbody>{sousCout.map((x, i) => (<tr key={i} data-testid="in-rap-perte-ligne"><td className="py-1.5 tabular text-xs">{x.f.number}</td><td>{ecDateFr(x.f.date)}</td><td>{x.l.label}</td><td className="text-right tabular">{x.l.qty}</td><td className="text-right tabular">{fmt(x.l.pu)}</td><td className="text-right tabular">{fmt(x.cu)}</td><td className="text-right tabular" style={{ color: "#A6432F" }}>{fmt(inR2((x.cu - x.l.pu) * x.l.qty))}</td></tr>))}</tbody>
-            <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={6}>Perte totale</td><td className="text-right tabular" data-testid="in-rap-perte-total">{fmt(S(sousCout, (x) => (x.cu - x.l.pu) * x.l.qty))}</td></tr></tfoot></table></div>)}
+          <div className="ec-wrap mb-4"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Facture</th><th>Date</th><th>Produit</th><th className="text-right">Quantité</th><th className="text-right">Prix vendu</th><th className="text-right">Coût moyen</th><th className="text-right">Perte</th><th>Raison</th></tr></thead>
+            <tbody>{sousCout.map((x, i) => (<tr key={i} data-testid="in-rap-perte-ligne"><td className="py-1.5 tabular text-xs">{x.f.number}</td><td>{ecDateFr(x.f.date)}</td><td>{x.l.label}</td><td className="text-right tabular">{x.l.qty}</td><td className="text-right tabular">{fmt(x.l.pu)}</td><td className="text-right tabular">{fmt(x.cu)}</td><td className="text-right tabular" style={{ color: "#A6432F" }}>{fmt(inR2((x.cu - x.l.pu) * x.l.qty))}</td><td className="text-xs" data-testid="in-rap-perte-motif">{x.l.perte ? (inMotifLibelle(x.l.motif, x.l.motifTxt) || "non justifiée") : "non justifiée"}</td></tr>))}</tbody>
+            <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={6}>Perte totale</td><td className="text-right tabular" data-testid="in-rap-perte-total">{fmt(S(sousCout, (x) => (x.cu - x.l.pu) * x.l.qty))}</td><td></td></tr></tfoot></table></div>)}
         <div className="display text-base mb-2" style={{ color: "#152238" }}>Marge par commande (lots rattachés à la commande)</div>
         <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Commande</th><th>Client</th><th className="text-right">Facturé HT</th><th className="text-right">Coût des lots</th><th className="text-right">Marge</th></tr></thead>
           <tbody>{parCmd.map((x) => (<tr key={x.c.id} data-testid="in-rap-cmd-ligne"><td className="py-1.5 tabular text-xs">{x.c.number}</td><td>{nomClient(x.c.clientId)}</td><td className="text-right tabular">{fmt(x.f.ht)}</td><td className="text-right tabular">{fmt(x.cout)}</td><td className="text-right tabular" style={{ color: x.marge < 0 ? "#A6432F" : undefined }}>{fmt(x.marge)}</td></tr>))}</tbody></table></div>
@@ -1030,6 +1160,13 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
       </div>
     );
   };
+  const CatalogueSheet = () => (
+    <div style={cadre} data-testid="in-catalogue-feuille">
+      {entete("CATALOGUE")}
+      {catsAll.map(([ck, cl]) => { const liste = prods.filter((p) => catDe(p) === ck && p.active !== false); return liste.length ? (<div key={ck} style={{ marginBottom: 14, pageBreakInside: "avoid" }}><div style={{ fontWeight: 700, fontSize: 15, borderBottom: "2px solid #C9A24B", marginBottom: 6 }}>{cl}</div>
+        {liste.map((p) => (<div key={p.id} style={{ display: "flex", gap: 10, padding: "5px 0", alignItems: "center" }}>{p.photo && <img src={p.photo} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6 }} />}<div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{p.name}{stockProd(p.id) <= 0 ? " (épuisé)" : ""}</div>{p.desc && <div style={{ fontSize: 11, color: "#7A7460" }}>{p.desc}</div>}</div><div style={{ fontWeight: 600 }}>{Number(p.price) > 0 ? fmt(p.price) + " / " + p.unit : "sur devis"}</div></div>))}</div>) : null; })}
+    </div>
+  );
   const LotSheet = ({ l }) => {
     const c = coutLot(l);
     return (
@@ -1054,11 +1191,12 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
   };
 
   const tabs = isVendeur
-    ? [["apercu", "Tableau de bord"], ["clients", "Clients"], ["commandes", "Commandes"], ["ventes", "Ventes"]]
-    : [["apercu", "Tableau de bord"], ["matieres", "Matières et achats"], ["produits", "Produits et recettes"], ["production", "Production"], ["clients", "Clients"], ["commandes", "Commandes"], ["ventes", "Ventes"], ["depenses", "Dépenses"], ["rapports", "Rapports"], ["stats", "Statistiques"]];
+    ? [["apercu", "Tableau de bord"], ["catalogue", "Catalogue"], ["clients", "Clients"], ["commandes", "Commandes"], ["ventes", "Ventes"]]
+    : [["apercu", "Tableau de bord"], ["matieres", "Matières et achats"], ["produits", "Produits et recettes"], ["catalogue", "Catalogue"], ["production", "Production"], ["clients", "Clients"], ["commandes", "Commandes"], ["ventes", "Ventes"], ["depenses", "Dépenses"], ["rapports", "Rapports"], ["stats", "Statistiques"]];
   const imprDoc = (() => {
     if (!imprimer) return null;
     if (imprimer.kind === "devis") { const c = cmds.find((x) => x.id === imprimer.id); return c ? { titre: "Devis " + c.number, node: <DevisSheet c={c} /> } : null; }
+    if (imprimer.kind === "catalogue") return { titre: "Catalogue", node: <CatalogueSheet /> };
     if (imprimer.kind === "lot") { const l = lots.find((x) => x.id === imprimer.id); return l ? { titre: "Fiche de fabrication " + l.number, node: <LotSheet l={l} /> } : null; }
     const f = facts.find((x) => x.id === imprimer.id);
     return f ? { titre: "Facture " + f.number, node: <FactureSheet f={f} />, ticket: true } : null;
@@ -1077,6 +1215,7 @@ function IndusModule({ suppliers, indus, setIndus, entries, setEntries, accounts
         {tab === "apercu" && Apercu()}
         {tab === "matieres" && !isVendeur && Matieres()}
         {tab === "produits" && !isVendeur && Produits()}
+        {tab === "catalogue" && Catalogue()}
         {tab === "production" && !isVendeur && Production()}
         {tab === "clients" && Clients()}
         {tab === "commandes" && Commandes()}

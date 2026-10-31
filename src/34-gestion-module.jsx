@@ -11,7 +11,10 @@ function GestionModule(props) {
   const [tab, setTab] = useState("echeances");
   const al = bzAlerts({ invoices, purchases, bizdocs, settings, today: todayStr() });
   const accOnly = settings && settings.accountingOnly === true;
-  const hideTab = (id) => accOnly && ACCOUNTING_ONLY_HIDDEN_GESTION_TABS.includes(id);
+  // Dans les espaces de métier qui ont leurs propres devis et leurs propres ventes (hors commerce, import-export et santé),
+  // les outils du commerce « Devis & commandes » et « Import POS » ne servent pas : on ne les propose pas.
+  const espaceSansCommerce = ["ecole", "resto", "hotel", "transport", "immo", "btp", "indus"].includes(props.espace);
+  const hideTab = (id) => (accOnly && ACCOUNTING_ONLY_HIDDEN_GESTION_TABS.includes(id)) || (espaceSansCommerce && (id === "docs" || id === "importpos"));
   const groups = [
     { label: "Suivi", tabs: [["echeances", `Échéances${al.total ? ` (${al.total})` : ""}`], ["docs", "Devis & commandes"], ["avoirs", "Avoirs & retours"], ["acomptes", "Acomptes & frais"], ["inventaire", "Inventaire"], ["importpos", "Import POS"], ["reprise", "Reprise comptable"], ["rapportbanque", "Ventes ↔ banque"], ["justificatifs", "Pièces justificatives"]].filter(([id]) => !hideTab(id)) },
     ...(premium ? [{ label: "Pilotage (Assisté / Extension)", tabs: [["recurrent", "Récurrence & projets"], ["budget", "Budget & prévisionnel"], ["pilotage", "Pilotage"]].filter(([id]) => !hideTab(id)) }] : []),

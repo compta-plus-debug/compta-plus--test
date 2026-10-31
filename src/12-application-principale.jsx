@@ -2817,6 +2817,9 @@ function App() {
           <AchatModule
             btp={btp}
             indus={indus}
+            transport={transport}
+            immo={immo}
+            espace={espace}
             cheques={cheques}
             setCheques={setCheques}
             accounts={accounts}
@@ -2911,6 +2914,7 @@ function App() {
         )}
         {active === "gestion" && role !== "Vendeur" && (
           <GestionModule
+            espace={espace}
             premium={planTier === "assisted" || !!groupId}
             bizdocs={bizdocs} setBizdocs={setBizdocs}
             invoices={invoices} setInvoices={setInvoices}
@@ -2942,10 +2946,10 @@ function App() {
           <IndusModule suppliers={suppliers} indus={indus} setIndus={setIndus} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "immo" && immoActif && (
-          <ImmobilierModule immo={immo} setImmo={setImmo} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
+          <ImmobilierModule suppliers={suppliers} immo={immo} setImmo={setImmo} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "transport" && transportActif && (
-          <TransportModule transport={transport} setTransport={setTransport} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
+          <TransportModule suppliers={suppliers} transport={transport} setTransport={setTransport} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
         )}
         {active === "hotel" && hotelActif && (
           <HotelModule hotel={hotel} setHotel={setHotel} entries={entries} setEntries={setEntries} accounts={accounts} setAccounts={setAccounts} settings={settings} role={role} showToast={showToast} logAudit={logAudit} currentUserEmail={currentUserEmail} />
