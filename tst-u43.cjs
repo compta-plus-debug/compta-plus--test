@@ -47,7 +47,7 @@ const seed=()=>[
  const dep=(await cat(p,'agri')).find(r=>r.type==='dep');
  ok('dépense journaliers imputée à la campagne, écriture 661/530',dep&&dep.campId&&dep.entryId,dep);
  const ent=await p.evaluate(()=>window.__srv.getCat('entries')||[]);
- ok('écriture comptable Débit 661 / Crédit caisse 530 de 500',ent.some(e=>(e.lines||[]).some(l=>l.account==='661'&&l.debit===500)&&(e.lines||[]).some(l=>l.account==='530'&&l.credit===500)),ent.map(e=>e.label));
+ ok('écriture comptable Débit 6612 / Crédit caisse 530 de 500',ent.some(e=>(e.lines||[]).some(l=>l.account==='6612'&&l.debit===500)&&(e.lines||[]).some(l=>l.account==='530'&&l.credit===500)),ent.map(e=>e.label));
  await g(p,'ag-dep-nature').selectOption('salarie');await g(p,'ag-dep-montant').fill('300');await g(p,'ag-dep-enregistrer').click();await p.waitForTimeout(300);
  ok('main-d\'œuvre salariée sans campagne choisie refusée',(await cat(p,'agri')).filter(r=>r.type==='dep').length===1);
  await g(p,'ag-dep-cible').selectOption({index:1});await g(p,'ag-dep-enregistrer').click();await p.waitForTimeout(400);
@@ -71,7 +71,7 @@ const seed=()=>[
  await g(p,'ag-bande-nom').fill('Poulets de chair');await g(p,'ag-bande-effectif').fill('100');await g(p,'ag-bande-debut').fill(back(30));await g(p,'ag-bande-achat').fill('2000');await g(p,'ag-bande-creer').click();await p.waitForTimeout(450);
  ok('bande créée, effectif 100',(await g(p,'ag-bande-ligne').count())===1&&(await g(p,'ag-bande-eff').innerText()).trim()==='100');
  const ent2=await p.evaluate(()=>window.__srv.getCat('entries')||[]);
- ok('achat des animaux : Débit 601 / Crédit 530 de 2 000',ent2.some(e=>(e.lines||[]).some(l=>l.account==='601'&&l.debit===2000)&&(e.lines||[]).some(l=>l.account==='530'&&l.credit===2000)));
+ ok('achat des animaux : Débit 6022 / Crédit 530 de 2 000',ent2.some(e=>(e.lines||[]).some(l=>l.account==='6022'&&l.debit===2000)&&(e.lines||[]).some(l=>l.account==='530'&&l.credit===2000)));
  await g(p,'ag-bande-ouvrir').click();await p.waitForTimeout(300);
  await g(p,'ag-mo-type').selectOption('mortalite');await g(p,'ag-mo-qte').fill('150');await g(p,'ag-mo-ajouter').click();await p.waitForTimeout(250);
  ok('mortalité supérieure à l\'effectif refusée',(await g(p,'ag-mo-ligne').count())===0);
