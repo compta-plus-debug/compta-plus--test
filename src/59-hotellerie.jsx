@@ -362,8 +362,8 @@ function HotelModule({ hotel, setHotel, entries, setEntries, accounts, setAccoun
     const ligne = (b, bouton) => (<div key={b.id} className="flex items-center justify-between text-sm py-1" data-testid="hotel-ligne-jour"><span>{guestDe(b.guestId).name} — {nomChambre(b.roomId)} ({ecDateFr(b.from)} → {ecDateFr(b.to)})</span><button onClick={() => { setSel(b.id); setTab("resa"); }} className="text-xs underline">{bouton}</button></div>);
     return (
       <div>
-        {!guideFait && (<div className="ec-card p-4 mb-5" data-testid="hotel-guide">
-          <div className="display text-base mb-2" style={{ color: "#152238" }}>Pour démarrer, en 7 étapes</div>
+        {(<div className="ec-card p-4 mb-5" data-testid="hotel-guide">
+          <div className="display text-base mb-2" style={{ color: "#152238" }}>Marche à suivre, en 7 étapes{guideFait ? " — toutes faites ✓" : ""}</div>
           <ol className="text-sm" style={{ color: "#152238", listStyle: "none", paddingLeft: 0 }}>{guide.map(([t, d, tb, fait], i) => (<li key={i} data-testid="hotel-etape" className="mb-1.5 flex flex-wrap gap-2 items-baseline"><span style={{ color: fait ? "#0F6B5C" : "#8A8370", fontWeight: 700 }}>{fait ? "✓" : (i + 1) + "."}</span><span><b>{t}</b> — <span style={{ color: "#5B563F" }}>{d}</span></span>{!fait && !(isVendeur && !["resa", "clients", "factures", "planning"].includes(tb)) && <button className="text-xs underline" data-testid="hotel-etape-ouvrir" onClick={() => setTab(tb)}>Ouvrir</button>}</li>))}</ol>
         </div>)}
         {types.length + rooms.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="hotel-vide">Pour commencer, dans cet ordre : <b>1.</b> onglet <b>Chambres et tarifs</b> : créez vos types de chambres (nom, personnes, tarif par nuit) · <b>2.</b> ajoutez vos chambres (numéro et type) · <b>3.</b> facultatif : vos services (petit-déjeuner, blanchisserie…), la taxe de séjour et la TCA · <b>4.</b> onglet <b>Clients</b> : enregistrez un client · <b>5.</b> onglet <b>Réservations</b> : créez une réservation.</div>}

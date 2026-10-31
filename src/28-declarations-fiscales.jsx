@@ -908,22 +908,33 @@ function CalendrierFiscalPanel({ today }) {
     ["Déclaration définitive de l'impôt sur le revenu des personnes (salariés, professionnels)", "Du 1er octobre au 31 janvier", an(1, 31), "Site DGI et avis de la DGI : à confirmer avec votre expert-comptable", "dgi"],
   ].sort((a, b) => a[2].localeCompare(b[2]));
   const jours = (d) => Math.round((new Date(d + "T12:00:00") - new Date(t + "T12:00:00")) / 86400000);
-  const ligne = (r, i) => (<tr key={i} data-testid="cal-ligne" style={{ borderBottom: "1px solid #F3EFE3" }}>
-    <td className="py-1.5 pr-2">{r[0]}<div className="text-xs" style={{ color: "#8A8370" }}>{r[3]}</div></td>
-    <td className="py-1.5 pr-2 whitespace-nowrap">{r[1]}</td>
-    <td className="py-1.5 text-right whitespace-nowrap tabular" style={{ color: jours(r[2]) <= 7 ? "#A6432F" : "#152238", fontWeight: jours(r[2]) <= 7 ? 700 : 400 }}>{jours(r[2]) === 0 ? "aujourd'hui" : "dans " + jours(r[2]) + " j"}</td>
-    <td className="py-1.5 pl-2 text-xs whitespace-nowrap" style={{ color: r[4] === "code" ? "#0F6B5C" : "#9A7B1E" }}>{r[4] === "code" ? "Code fiscal" : "À confirmer"}</td></tr>);
+  const ligne = (r, i) => (<div key={i} data-testid="cal-ligne" className="py-2" style={{ borderTop: i > 0 ? "1px solid #F3EFE3" : "none" }}>
+    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+      <div className="text-sm" style={{ color: "#152238", flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere" }}>{r[0]}</div>
+      <div className="text-xs" style={{ color: jours(r[2]) <= 7 ? "#A6432F" : "#152238", fontWeight: jours(r[2]) <= 7 ? 700 : 500 }}>{jours(r[2]) === 0 ? "aujourd'hui" : "dans " + jours(r[2]) + " j"}</div>
+    </div>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+      <span className="text-xs" style={{ color: "#5B563F" }}>{r[1]}</span>
+      <span className="text-xs" style={{ color: r[4] === "code" ? "#0F6B5C" : "#9A7B1E", fontWeight: 600 }}>{r[4] === "code" ? "Code fiscal" : "À confirmer"}</span>
+    </div>
+    <div className="text-xs mt-0.5" style={{ color: "#8A8370", overflowWrap: "anywhere" }}>{r[3]}</div></div>);
   const prochaines = annuelles.filter((r) => jours(r[2]) <= 45);
   return (
     <div data-testid="calendrier-fiscal">
-      <div className="text-sm font-medium mb-1" style={{ color: "#152238" }}>Calendrier fiscal</div>
-      <p className="text-xs mb-3" style={{ color: "#8A8370" }}>Toutes les échéances au même endroit. Les lignes « Code fiscal » suivent le nouveau Code en vigueur depuis le 1er octobre 2026 (celui que l'application applique déjà). Les lignes « À confirmer » viennent de pages publiques de la DGI qui peuvent dater de l'ancien Code : vérifiez-les avec votre expert-comptable avant de vous y fier. Cet écran ne calcule rien et ne modifie rien.</p>
-      {prochaines.length > 0 && (<div className="px-3 py-2 rounded mb-4 text-sm" style={{ background: "#FBF1DC", color: "#152238" }} data-testid="cal-proches"><b>À venir dans les 45 jours :</b> {prochaines.map((r) => r[0].split(" (")[0] + " (" + r[1].toLowerCase() + ")").join(" · ")}</div>)}
-      <div className="text-xs font-semibold mb-1" style={{ color: "#8A8370" }}>Chaque mois</div>
-      <div className="ec-wrap mb-4"><table className="w-full text-sm"><tbody>{mensuelles.map(ligne)}</tbody></table></div>
-      <div className="text-xs font-semibold mb-1" style={{ color: "#8A8370" }}>Chaque année</div>
-      <div className="ec-wrap mb-4"><table className="w-full text-sm" data-testid="cal-annuelles"><tbody>{annuelles.map(ligne)}</tbody></table></div>
-      <div className="p-3 rounded text-xs" style={{ background: "#FAF8F1", border: "1px solid #EEE9DA", color: "#5B563F" }} data-testid="cal-rappels">
+      <div className="ec-card p-4 mb-4">
+        <div className="display text-base mb-1" style={{ color: "#152238" }}>Calendrier fiscal</div>
+        <p className="text-xs" style={{ color: "#8A8370" }}>Toutes les échéances au même endroit. Les lignes « Code fiscal » suivent le nouveau Code en vigueur depuis le 1er octobre 2026 (celui que l'application applique déjà). Les lignes « À confirmer » viennent de pages publiques de la DGI qui peuvent dater de l'ancien Code : vérifiez-les avec votre expert-comptable avant de vous y fier. Cet écran ne calcule rien et ne modifie rien.</p>
+        {prochaines.length > 0 && (<div className="px-3 py-2 rounded mt-3 text-sm" style={{ background: "#FBF1DC", color: "#152238", overflowWrap: "anywhere" }} data-testid="cal-proches"><b>À venir dans les 45 jours :</b> {prochaines.map((r) => r[0].split(" (")[0] + " (" + r[1].toLowerCase() + ")").join(" · ")}</div>)}
+      </div>
+      <div className="ec-card p-4 mb-4">
+        <div className="display text-base mb-1" style={{ color: "#152238" }}>Chaque mois</div>
+        <div>{mensuelles.map(ligne)}</div>
+      </div>
+      <div className="ec-card p-4 mb-4">
+        <div className="display text-base mb-1" style={{ color: "#152238" }}>Chaque année</div>
+        <div data-testid="cal-annuelles">{annuelles.map(ligne)}</div>
+      </div>
+      <div className="ec-card p-4 text-xs" style={{ color: "#5B563F", overflowWrap: "anywhere" }} data-testid="cal-rappels">
         <b>À savoir.</b> Les documents de paiement (versements, états explicatifs, registre du personnel) se gardent 5 ans et se présentent à tout contrôle. L'employeur remet à chaque employé une attestation des retenues faites. Un retard de plus de 30 jours entraîne des intérêts, et le retard de la liste annuelle des versements une pénalité par mois : les montants exacts du nouveau Code sont à demander à votre expert-comptable.
       </div>
     </div>

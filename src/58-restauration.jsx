@@ -452,8 +452,8 @@ function RestoModule({ resto, setResto, entries, setEntries, accounts, setAccoun
     const kpis = [["Ventes du jour", rsM(caJour), "resto-kpi-jour"], ["Additions du jour", String(jour.length), "resto-kpi-nb"], ["Panier moyen (jour)", rsM(panier), "resto-kpi-panier"], ["Ventes du mois", rsM(caMois), "resto-kpi-mois"], ["Commandes ouvertes", String(ouvertes.length), "resto-kpi-ouvertes"], ["Service à répartir", rsM(poolTout), "resto-kpi-service"]];
     return (
       <div>
-        {!guideFait && (<div className="ec-card p-4 mb-5" data-testid="resto-guide">
-          <div className="display text-base mb-2" style={{ color: "#152238" }}>Pour démarrer, en 7 étapes</div>
+        {(<div className="ec-card p-4 mb-5" data-testid="resto-guide">
+          <div className="display text-base mb-2" style={{ color: "#152238" }}>Marche à suivre, en 7 étapes{guideFait ? " — toutes faites ✓" : ""}</div>
           <ol className="text-sm" style={{ color: "#152238", listStyle: "none", paddingLeft: 0 }}>{guide.map(([t, d, tb, fait], i) => (<li key={i} data-testid="resto-etape" className="mb-1.5 flex flex-wrap gap-2 items-baseline"><span style={{ color: fait ? "#0F6B5C" : "#8A8370", fontWeight: 700 }}>{fait ? "✓" : (i + 1) + "."}</span><span><b>{t}</b> — <span style={{ color: "#5B563F" }}>{d}</span></span>{!fait && !(isVendeur && !["salle", "menu", "recettes", "factures"].includes(tb)) && <button className="text-xs underline" data-testid="resto-etape-ouvrir" onClick={() => setTab(tb)}>Ouvrir</button>}</li>))}</ol>
         </div>)}
         {tables.length + dishes.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="resto-vide">Pour commencer, dans cet ordre : <b>1.</b> onglet <b>Salle</b> : créez vos tables · <b>2.</b> onglet <b>Menu</b> : ajoutez vos plats avec photo et prix · <b>3.</b> onglet <b>Recettes et coûts</b> : liez les ingrédients du stock · <b>4.</b> onglet <b>Personnel</b> : ajoutez vos employés et leur poste · <b>5.</b> onglet <b>Salle</b> : touchez une table pour prendre une commande.</div>}

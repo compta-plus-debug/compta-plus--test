@@ -1429,8 +1429,8 @@ function AgriModule({ suppliers, agri, setAgri, entries, setEntries, accounts, s
     const kpis = [["Ventes du mois (HT)", fmt(caMois), "ag-kpi-ca"], ["Encaissé ce mois", fmt(encMois), "ag-kpi-enc"], ["Reste à encaisser", fmt(aEnc), "ag-kpi-aenc"], ["Campagnes en cours", String(camps.filter((c) => c.status === "encours").length), "ag-kpi-camp"], ["Animaux présents", String(cheptel), "ag-kpi-cheptel"], ["Dépenses de la ferme du mois", fmt(depMois), "ag-kpi-dep"], ["Intrants en stock bas", String(bas.length), "ag-kpi-bas"], ["Choses à faire", String(afaire.length), "ag-kpi-afaire"]];
     return (
       <div>
-        {!toutFait && (<div className="ec-card p-4 mb-5" data-testid="ag-guide">
-          <div className="display text-base mb-2" style={{ color: "#152238" }}>Pour démarrer, en 7 étapes</div>
+        {(<div className="ec-card p-4 mb-5" data-testid="ag-guide">
+          <div className="display text-base mb-2" style={{ color: "#152238" }}>Marche à suivre, en 7 étapes{toutFait ? " — toutes faites ✓" : ""}</div>
           <ol className="text-sm" style={{ color: "#152238", listStyle: "none", paddingLeft: 0 }}>{etapes.map(([t, d, tb, fait], i) => (<li key={i} data-testid="ag-etape" className="mb-1.5 flex flex-wrap gap-2 items-baseline"><span style={{ color: fait ? "#0F6B5C" : "#8A8370", fontWeight: 700 }}>{fait ? "✓" : (i + 1) + "."}</span><span><b>{t}</b> — <span style={{ color: "#5B563F" }}>{d}</span></span>{!fait && !(isVendeur && !["commandes", "ventes"].includes(tb)) && <button className="text-xs underline" data-testid="ag-etape-ouvrir" onClick={() => setTab(tb)}>Ouvrir</button>}</li>))}</ol>
         </div>)}
         {mats.length + prods.length + cmds.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="ag-vide">Pour commencer : créez vos <b>produits</b> et vos <b>intrants</b>, achetez des intrants, ouvrez une <b>campagne</b> (ou une <b>bande</b> d'animaux), puis enregistrez votre première <b>récolte</b>.</div>}
