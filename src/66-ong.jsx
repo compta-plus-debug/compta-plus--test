@@ -21,17 +21,26 @@
 
 const OG_TYPES = [["ong", "ONG (projets financés par des bailleurs)"], ["association", "Association ou club"], ["eglise", "Église ou communauté religieuse"], ["fondation", "Fondation ou école communautaire"]];
 const OG_VOC = {
-  ong: { contacts: "Bailleurs et donateurs", membres: "Membres" },
-  association: { contacts: "Donateurs et partenaires", membres: "Membres" },
-  eglise: { contacts: "Donateurs", membres: "Fidèles et membres" },
-  fondation: { contacts: "Donateurs et parrains", membres: "Membres" },
+  ong: { contacts: "Bailleurs et donateurs", membres: "Membres", recettes: "Dons, subventions et reçus", formRecette: "Nouvelle recette (subvention, don, collecte…) avec reçu", fondsForm: "Nouveau fonds (un projet, un bailleur)", exFonds: "Projet eau potable 2026, Appui à l'école…", bailleur: "Bailleur", lBailleur: "le bailleur", guideDon: "enregistrez la subvention d'un bailleur ou un don", rapAnnuel: "Rapport annuel des dons" },
+  association: { contacts: "Donateurs et partenaires", membres: "Membres", recettes: "Dons, collectes et reçus", formRecette: "Nouvelle recette (don, collecte, subvention…) avec reçu", fondsForm: "Nouveau fonds (un projet, une activité, une campagne)", exFonds: "Fête annuelle, Achat de matériel, Tournoi…", bailleur: "Financeur", lBailleur: "le financeur", guideDon: "enregistrez un don ou le produit d'une collecte", rapAnnuel: "Rapport annuel des dons" },
+  eglise: { contacts: "Donateurs", membres: "Fidèles et membres", recettes: "Dîmes, offrandes et reçus", formRecette: "Nouvelle recette (dîme, offrande, don…) avec reçu", fondsForm: "Nouveau fonds (construction, œuvres sociales, campagne…)", exFonds: "Construction de l'église, Œuvres sociales, Campagne de Noël…", bailleur: "Partenaire", lBailleur: "le partenaire", guideDon: "enregistrez une dîme, une offrande ou un don", rapAnnuel: "Rapport annuel des dîmes, offrandes et dons" },
+  fondation: { contacts: "Donateurs et parrains", membres: "Membres", recettes: "Dons, subventions et reçus", formRecette: "Nouvelle recette (don, parrainage, subvention…) avec reçu", fondsForm: "Nouveau fonds (un projet, un bailleur, une campagne)", exFonds: "Bourses 2026, Cantine scolaire…", bailleur: "Bailleur", lBailleur: "le bailleur", guideDon: "enregistrez un don, un parrainage ou une subvention", rapAnnuel: "Rapport annuel des dons" },
 };
-const OG_RECETTES = [["don", "Don", "7581"], ["subvention", "Subvention ou financement de bailleur", "7582"], ["cotisation", "Cotisation de membre", "7583"], ["dime", "Dîme", "7584"], ["offrande", "Offrande ou collecte du culte", "7584"], ["collecte", "Collecte, vente ou activité de levée de fonds", "7585"], ["autre", "Autre recette", "7589"]];
+// libellés qui changent selon le type d'organisation (le reste reprend le libellé de base)
+const OG_LIB_REC = { ong: {}, association: {}, eglise: { collecte: "Collecte spéciale ou activité de levée de fonds" }, fondation: { don: "Don ou parrainage" } };
+const OG_LIB_DEP = {
+  ong: {},
+  association: { aides: "Aides aux membres et bénéficiaires", loyer: "Loyer du local" },
+  eglise: { activites: "Fournitures et matériel (culte, activités)", aides: "Œuvres sociales et aides aux nécessiteux", formation: "Formation, retraites et séminaires", honoraires: "Honoraires et intervenants", loyer: "Loyer ou entretien du lieu de culte", salarie: "Pasteur ou personnel salarié imputé (déjà payé par Salaires, sans écriture)" },
+  fondation: { aides: "Bourses et aides aux bénéficiaires" },
+};
+const OG_RECETTES = [["don", "Don", "7581"], ["subvention", "Subvention ou financement", "7582"], ["cotisation", "Cotisation de membre", "7583"], ["dime", "Dîme", "7584"], ["offrande", "Offrande", "7584"], ["collecte", "Collecte, vente ou activité de levée de fonds", "7585"], ["autre", "Autre recette", "7589"]];
 const OG_RECETTES_PAR_TYPE = { ong: ["subvention", "don", "collecte", "autre"], association: ["don", "collecte", "subvention", "autre"], eglise: ["dime", "offrande", "don", "collecte", "autre"], fondation: ["don", "subvention", "collecte", "autre"] };
 const OG_DEPENSES = [["activites", "Fournitures et matériel des activités", "6041"], ["aides", "Aides et secours aux bénéficiaires", "6581"], ["formation", "Formation, ateliers et réunions", "6331"], ["transport", "Transport et déplacements", "6183"], ["honoraires", "Honoraires et consultants", "6322"], ["communication", "Communication et publicité", "6231"], ["loyer", "Loyer des locaux", "6133"], ["energie", "Eau, électricité et énergie", "6056"], ["temporaires", "Personnel temporaire et vacataires", "6613"], ["salarie", "Personnel salarié imputé (déjà payé par Salaires, sans écriture)", ""], ["autre", "Autres frais de fonctionnement", "6283"]];
-const OG_MOTIFS = [["accord", "Dépassement accepté par le bailleur ou le comité"], ["avance", "Avance du fonds général (à rembourser au fonds)"], ["report", "Report de crédit d'une autre période"], ["erreur", "Erreur de budget à corriger"], ["autre", "Autre raison (à préciser)"]];
+const OG_MOTIFS_BASE = [["accord", "Dépassement accepté par {B} ou le comité"], ["avance", "Avance du fonds général (à rembourser au fonds)"], ["report", "Report de crédit d'une autre période"], ["erreur", "Erreur de budget à corriger"], ["autre", "Autre raison (à préciser)"]];
 const OG_PERIODES = [["annuelle", "Annuelle"], ["trimestrielle", "Trimestrielle"], ["mensuelle", "Mensuelle"]];
 const OG_CONTACTS = [["particulier", "Particulier"], ["entreprise", "Entreprise"], ["bailleur", "Bailleur (institution, agence)"], ["partenaire", "Église, association ou ONG partenaire"]];
+const OG_CONTACTS_PAR_TYPE = { ong: ["particulier", "entreprise", "bailleur", "partenaire"], association: ["particulier", "entreprise", "bailleur", "partenaire"], eglise: ["particulier", "entreprise", "partenaire"], fondation: ["particulier", "entreprise", "bailleur", "partenaire"] };
 const OG_COMPTES = {
   "401": { name: "Fournisseurs", type: "Passif" },
   "512": { name: "Banque", type: "Actif" },
@@ -136,7 +145,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   const cfg = ogRows(ong, "config")[0] || {};
   const orgType = cfg.orgType || "";
   const V = OG_VOC[orgType || "ong"];
-  const kindsDon = (OG_RECETTES_PAR_TYPE[orgType || "ong"] || OG_RECETTES_PAR_TYPE.ong).map((k) => OG_RECETTES.find((r) => r[0] === k));
+  const kindsDon = (OG_RECETTES_PAR_TYPE[orgType || "ong"] || OG_RECETTES_PAR_TYPE.ong).map((k) => { const r = OG_RECETTES.find((x) => x[0] === k); return [r[0], ((OG_LIB_REC[orgType || "ong"] || {})[k]) || r[1], r[2]]; });
   const donsOk = dons.filter((d) => d.status !== "annulé");
   const depsOk = deps.filter((d) => d.status !== "annulé");
   const viresOk = vires.filter((v) => v.status !== "annulé");
@@ -188,8 +197,13 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   const nomContact = (id) => (contacts.find((c) => c.id === id) || {}).name || "—";
   const nomMembre = (id) => (membres.find((m) => m.id === id) || {}).name || "—";
   const donateur = (d) => (d.memberId ? nomMembre(d.memberId) : d.donorId ? nomContact(d.donorId) : (d.donorName || "Donateur anonyme"));
-  const natureDon = (k) => (OG_RECETTES.find((r) => r[0] === k) || [0, k])[1];
-  const natureDep = (k) => (OG_DEPENSES.find((r) => r[0] === k) || [0, k])[1];
+  const natureDon = (k) => ((OG_LIB_REC[orgType || "ong"] || {})[k]) || (OG_RECETTES.find((r) => r[0] === k) || [0, k])[1];
+  const natureDep = (k) => ((OG_LIB_DEP[orgType || "ong"] || {})[k]) || (OG_DEPENSES.find((r) => r[0] === k) || [0, k])[1];
+  const OG_MOTIFS = OG_MOTIFS_BASE.map((m) => [m[0], m[1].replace("{B}", V.lBailleur)]);
+  const kindsRecAll = OG_RECETTES.map((r) => [r[0], natureDon(r[0])]);
+  const kindsDep = OG_DEPENSES.map((r) => [r[0], natureDep(r[0])]);
+  const kindsContact = (OG_CONTACTS_PAR_TYPE[orgType || "ong"] || OG_CONTACTS_PAR_TYPE.ong).map((k) => OG_CONTACTS.find((c) => c[0] === k));
+  const sorteContact = (k) => (k === "bailleur" ? V.bailleur + " (institution, agence)" : (OG_CONTACTS.find((c) => c[0] === k) || [0, ""])[1]);
   const resteDep = (d) => ogR2(d.mode === "apayer" ? d.amount - ogPaye(d.settlements) : 0);
   const verifDepassement = (fondId, amount) => {
     const s = sFonds(fondId), f = fonds.find((x) => x.id === fondId), msgs = [];
@@ -211,8 +225,8 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   const ajouterContact = () => {
     if (!canFront) return;
     const name = fco.name.trim();
-    if (!name) { showToast("Indiquez le nom du donateur ou du bailleur."); return; }
-    if (lignesAJour("contact").some((c) => ogNom(c.name) === ogNom(name))) { showToast("Un donateur ou bailleur de ce nom existe déjà."); return; }
+    if (!name) { showToast("Indiquez le nom du donateur" + (orgType === "eglise" ? "" : " ou du " + V.bailleur.toLowerCase()) + "."); return; }
+    if (lignesAJour("contact").some((c) => ogNom(c.name) === ogNom(name))) { showToast("Un contact de ce nom existe déjà."); return; }
     ajouter({ type: "contact", id: ogId(), name, kind: fco.kind, phone: fco.phone.trim(), email: fco.email.trim(), address: fco.address.trim() });
     setFco({ ...fco, name: "", phone: "", email: "", address: "" }); showToast("« " + name + " » ajouté."); logAudit("ONG et associations", "Donateur ajouté", name);
   };
@@ -230,7 +244,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
         {canFront && (<div className="ec-card p-4 mb-5" data-testid="og-contact-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouveau contact</div>
           <div className="grid md:grid-cols-4 gap-2 items-end">
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom</label><input value={fco.name} onChange={(e) => setFco({ ...fco, name: e.target.value })} data-testid="og-contact-nom" className={ecInput} style={ecBorder} /></div>
-            <div><label className="text-xs" style={{ color: "#8A8370" }}>Sorte</label><select value={fco.kind} onChange={(e) => setFco({ ...fco, kind: e.target.value })} data-testid="og-contact-sorte" className={ecInput} style={ecBorder}>{OG_CONTACTS.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>Sorte</label><select value={fco.kind} onChange={(e) => setFco({ ...fco, kind: e.target.value })} data-testid="og-contact-sorte" className={ecInput} style={ecBorder}>{kindsContact.map((k) => <option key={k[0]} value={k[0]}>{k[0] === "bailleur" ? V.bailleur + " (institution, agence)" : k[1]}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Téléphone</label><input value={fco.phone} onChange={(e) => setFco({ ...fco, phone: e.target.value })} className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Courriel</label><input value={fco.email} onChange={(e) => setFco({ ...fco, email: e.target.value })} className={ecInput} style={ecBorder} /></div>
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Adresse</label><input value={fco.address} onChange={(e) => setFco({ ...fco, address: e.target.value })} className={ecInput} style={ecBorder} /></div>
@@ -240,7 +254,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
           <input value={cq} onChange={(e) => setCq(e.target.value)} placeholder="Rechercher (nom, téléphone, courriel)" className={ecInput + " md:w-72"} style={ecBorder} data-testid="og-contact-recherche" /></div>
           {rows.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucun contact. Les dons peuvent aussi être enregistrés sans nom (donateur anonyme).</div> : (
             <div>{rows.map((c, i) => { const mine = donsOk.filter((d) => d.donorId === c.id); return (<div key={c.id} data-testid="og-contact-ligne" className="py-2 text-sm" style={{ borderTop: i > 0 ? "1px solid #F3EFE3" : "none", overflowWrap: "anywhere" }}>
-              <div className="flex flex-wrap justify-between gap-2"><span><b>{c.name}</b> <span className="text-xs" style={{ color: "#8A8370" }}>· {(OG_CONTACTS.find((k) => k[0] === c.kind) || [0, ""])[1]}</span></span><span className="tabular">{mine.length} don(s) · <b>{ogM(mine.reduce((s, d) => s + d.amount, 0))}</b></span></div>
+              <div className="flex flex-wrap justify-between gap-2"><span><b>{c.name}</b> <span className="text-xs" style={{ color: "#8A8370" }}>· {sorteContact(c.kind)}</span></span><span className="tabular">{mine.length} don(s) · <b>{ogM(mine.reduce((s, d) => s + d.amount, 0))}</b></span></div>
               <div className="text-xs" style={{ color: "#8A8370" }}>{[c.phone, c.email, c.address].filter(Boolean).join(" · ") || "—"}{canEdit && mine.length === 0 && !fonds.some((f) => f.bailleurId === c.id) && <button className="underline ml-2" style={{ color: "#A6432F" }} onClick={() => retirerContact(c)} data-testid="og-contact-retirer">Retirer</button>}</div></div>); })}</div>)}
         </div>
       </div>
@@ -343,7 +357,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   const creerFonds = () => {
     if (!canEdit) return;
     const name = ffo.name.trim();
-    if (!name) { showToast("Donnez un nom au fonds (ex. Projet eau potable 2026, Construction de la salle)."); return; }
+    if (!name) { showToast("Donnez un nom au fonds (ex. " + V.exFonds.replace(/…$/, "") + ")."); return; }
     if (lignesAJour("fonds").some((f) => ogNom(f.name) === ogNom(name)) || ogNom(name) === ogNom("Fonds général")) { showToast("Un fonds de ce nom existe déjà."); return; }
     if (ffo.budget !== "" && !(Number(ffo.budget) > 0)) { showToast("Le budget doit être supérieur à zéro."); return; }
     if (ffo.start && ffo.end && ffo.end < ffo.start) { showToast("La fin du projet ne peut pas précéder son début."); return; }
@@ -395,7 +409,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
       const bailleur = f && f.bailleurId ? nomContact(f.bailleurId) : "";
       return (<div key={id || "general"} className="ec-card p-4" data-testid="og-fonds-carte" style={{ opacity: f && f.status === "clos" ? 0.6 : 1 }}>
         <div className="flex flex-wrap justify-between gap-2"><div className="display text-base" style={{ color: "#152238", overflowWrap: "anywhere" }}>{nom}</div>{f ? (f.status === "clos" ? ecPastille("Clôturé", "neutre") : f.end && f.end < today ? ecPastille("Échu", "alerte") : ecPastille("Actif", "ok")) : ecPastille("Libre", "neutre")}</div>
-        <div className="text-xs mb-2" style={{ color: "#8A8370" }}>{f ? [f.number, bailleur && "Bailleur : " + bailleur, f.start && "du " + ecDateFr(f.start), f.end && "au " + ecDateFr(f.end)].filter(Boolean).join(" · ") : "Argent sans destination précise : fonctionnement général de l'organisation"}</div>
+        <div className="text-xs mb-2" style={{ color: "#8A8370" }}>{f ? [f.number, bailleur && V.bailleur + " : " + bailleur, f.start && "du " + ecDateFr(f.start), f.end && "au " + ecDateFr(f.end)].filter(Boolean).join(" · ") : "Argent sans destination précise : fonctionnement général de l'organisation"}</div>
         <div className="grid grid-cols-3 gap-2 text-sm"><div><div className="text-xs" style={{ color: "#8A8370" }}>Reçu</div><div className="tabular" data-testid="og-fonds-recu">{ogM(s.recu + s.vin)}</div></div><div><div className="text-xs" style={{ color: "#8A8370" }}>Dépensé</div><div className="tabular" data-testid="og-fonds-dep">{ogM(s.dep + s.vout)}</div></div><div><div className="text-xs" style={{ color: "#8A8370" }}>Solde</div><div className="tabular" data-testid="og-fonds-solde" style={{ fontWeight: 700, color: s.solde < -0.004 ? "#A6432F" : "#152238" }}>{ogM(s.solde)}</div></div></div>
         {bud > 0 && (<div className="mt-2"><div className="text-xs" style={{ color: "#8A8370" }}>Budget {ogM(bud)} · dépensé {pct} %{s.dep > bud + 0.004 ? " — budget dépassé" : ""}</div><div style={{ background: "#EEE9DA", borderRadius: 4, height: 6 }}><div style={{ width: pct + "%", background: s.dep > bud + 0.004 ? "#A6432F" : "#0F6B5C", height: 6, borderRadius: 4 }} /></div></div>)}
         <div className="mt-2 flex flex-wrap gap-3 text-xs"><button className="underline" onClick={() => setSelFonds(selFonds === id && id ? "" : id || "__general")} data-testid="og-fonds-ouvrir">{selFonds === (id || "__general") ? "Fermer" : "Détail"}</button></div>
@@ -411,10 +425,10 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     ].sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
     return (
       <div>
-        {canEdit && (<div className="ec-card p-4 mb-5" data-testid="og-fonds-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouveau fonds (un projet, un bailleur, une campagne)</div>
+        {canEdit && (<div className="ec-card p-4 mb-5" data-testid="og-fonds-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>{V.fondsForm}</div>
           <div className="grid md:grid-cols-4 gap-2 items-end">
-            <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom (Projet eau potable 2026, Construction de la salle…)</label><input value={ffo.name} onChange={(e) => setFfo({ ...ffo, name: e.target.value })} data-testid="og-fonds-nom" className={ecInput} style={ecBorder} /></div>
-            <div><label className="text-xs" style={{ color: "#8A8370" }}>Bailleur (facultatif)</label><select value={ffo.bailleurId} onChange={(e) => setFfo({ ...ffo, bailleurId: e.target.value })} data-testid="og-fonds-bailleur" className={ecInput} style={ecBorder}><option value="">— aucun —</option>{contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nom ({V.exFonds})</label><input value={ffo.name} onChange={(e) => setFfo({ ...ffo, name: e.target.value })} data-testid="og-fonds-nom" className={ecInput} style={ecBorder} /></div>
+            <div><label className="text-xs" style={{ color: "#8A8370" }}>{V.bailleur} (facultatif)</label><select value={ffo.bailleurId} onChange={(e) => setFfo({ ...ffo, bailleurId: e.target.value })} data-testid="og-fonds-bailleur" className={ecInput} style={ecBorder}><option value="">— aucun —</option>{contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Budget du projet (facultatif)</label><input type="number" min="0" step="0.01" value={ffo.budget} onChange={(e) => setFfo({ ...ffo, budget: e.target.value })} data-testid="og-fonds-budget" className={ecInput + " tabular"} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Début (facultatif)</label><input type="date" value={ffo.start} onChange={(e) => setFfo({ ...ffo, start: e.target.value })} data-testid="og-fonds-debut" className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Fin prévue (facultatif)</label><input type="date" value={ffo.end} onChange={(e) => setFfo({ ...ffo, end: e.target.value })} data-testid="og-fonds-fin" className={ecInput} style={ecBorder} /></div>
@@ -488,7 +502,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     const exporter = () => ecTelecharger("dons-" + today + ".csv", [["Reçu", "Date", "Donateur", "Nature", "Fonds", "Montant", "Mode", "État"], ...rows.map((d) => [d.number, d.date, donateur(d), natureDon(d.kind), nomFonds(d.fondId), d.amount, d.mode, d.status === "annulé" ? "annulé" : "valide"])]);
     return (
       <div>
-        {canFront && (<div className="ec-card p-4 mb-5" data-testid="og-don-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle recette (don, subvention, offrande…) avec reçu</div>
+        {canFront && (<div className="ec-card p-4 mb-5" data-testid="og-don-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>{V.formRecette}</div>
           <div className="grid md:grid-cols-4 gap-2 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" max={today} value={fdo.date} onChange={(e) => setFdo({ ...fdo, date: e.target.value })} data-testid="og-don-date" className={ecInput} style={ecBorder} /></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Nature</label><select value={kindCourant} onChange={(e) => setFdo({ ...fdo, kind: e.target.value })} data-testid="og-don-nature" className={ecInput} style={ecBorder}>{kindsDon.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
@@ -500,9 +514,9 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Remarque (facultatif)</label><input value={fdo.label} onChange={(e) => setFdo({ ...fdo, label: e.target.value })} data-testid="og-don-remarque" className={ecInput} style={ecBorder} /></div>
           </div>
           <button onClick={enregistrerDon} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="og-don-enregistrer">Enregistrer et imprimer le reçu</button></div>)}
-        <div className="ec-card p-4"><div className="flex flex-wrap gap-2 items-end mb-2"><div className="display text-base" style={{ color: "#152238" }}>Dons et reçus</div>
+        <div className="ec-card p-4"><div className="flex flex-wrap gap-2 items-end mb-2"><div className="display text-base" style={{ color: "#152238" }}>{V.recettes}</div>
           <input value={dq} onChange={(e) => setDq(e.target.value)} placeholder="Rechercher (n° de reçu, donateur)" className={ecInput + " md:w-64"} style={ecBorder} data-testid="og-don-recherche" />
-          <select value={dk} onChange={(e) => setDk(e.target.value)} className={ecInput + " md:w-56"} style={ecBorder}><option value="">Toutes natures</option>{OG_RECETTES.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select>
+          <select value={dk} onChange={(e) => setDk(e.target.value)} className={ecInput + " md:w-56"} style={ecBorder}><option value="">Toutes natures</option>{kindsRecAll.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select>
           <select value={df} onChange={(e) => setDf(e.target.value)} className={ecInput + " md:w-56"} style={ecBorder}><option value="__tous">Tous les fonds</option>{[["", "Fonds général (libre)"], ...fonds.map((f) => [f.id, f.name])].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
           <button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn}>Exporter (CSV)</button></div>
           <div className="text-sm mb-2">Total affiché : <b className="tabular" data-testid="og-don-total">{ogM(tot)}</b></div>
@@ -591,7 +605,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
         {canEdit && (<div className="ec-card p-4 mb-5" data-testid="og-dep-form"><div className="display text-base mb-2" style={{ color: "#152238" }}>Nouvelle dépense</div>
           <div className="grid md:grid-cols-4 gap-2 items-end">
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Date</label><input type="date" max={today} value={fd.date} onChange={(e) => setFd({ ...fd, date: e.target.value })} data-testid="og-dep-date" className={ecInput} style={ecBorder} /></div>
-            <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nature</label><select value={fd.kind} onChange={(e) => setFd({ ...fd, kind: e.target.value })} data-testid="og-dep-nature" className={ecInput} style={ecBorder}>{OG_DEPENSES.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
+            <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Nature</label><select value={fd.kind} onChange={(e) => setFd({ ...fd, kind: e.target.value })} data-testid="og-dep-nature" className={ecInput} style={ecBorder}>{kindsDep.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
             <div><label className="text-xs" style={{ color: "#8A8370" }}>Montant (G)</label><input type="number" min="0" step="0.01" value={fd.amount} onChange={(e) => { setAlerteDep(null); setFd({ ...fd, amount: e.target.value }); }} data-testid="og-dep-montant" className={ecInput + " tabular"} style={ecBorder} /></div>
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Imputer au fonds</label><select value={fd.fondId} onChange={(e) => { setAlerteDep(null); setFd({ ...fd, fondId: e.target.value }); }} data-testid="og-dep-fonds" className={ecInput} style={ecBorder}>{fondsOptions.map((o) => <option key={o[0]} value={o[0]}>{o[1]}{o[0] ? "" : ""}</option>)}</select></div>
             {def[2] && <div><label className="text-xs" style={{ color: "#8A8370" }}>Payé</label><select value={fd.mode} onChange={(e) => setFd({ ...fd, mode: e.target.value })} data-testid="og-dep-mode" className={ecInput} style={ecBorder}><option value="caisse">Caisse (espèces)</option><option value="banque">Banque</option><option value="apayer">À payer plus tard (dette)</option></select></div>}
@@ -606,7 +620,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
           <button onClick={() => enregistrerDepense(false)} className="mt-2 px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="og-dep-enregistrer">Enregistrer la dépense</button></div>)}
         <div className="ec-card p-4"><div className="flex flex-wrap gap-2 items-end mb-2"><div className="display text-base" style={{ color: "#152238" }}>Dépenses</div>
           <input value={dpq} onChange={(e) => setDpq(e.target.value)} placeholder="Rechercher (détail, fournisseur, fonds)" className={ecInput + " md:w-64"} style={ecBorder} data-testid="og-dep-recherche" />
-          <select value={dpk} onChange={(e) => setDpk(e.target.value)} className={ecInput + " md:w-64"} style={ecBorder}><option value="">Toutes natures</option>{OG_DEPENSES.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
+          <select value={dpk} onChange={(e) => setDpk(e.target.value)} className={ecInput + " md:w-64"} style={ecBorder}><option value="">Toutes natures</option>{kindsDep.map((k) => <option key={k[0]} value={k[0]}>{k[1]}</option>)}</select></div>
           {rows.length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucune dépense.</div> : (
             <div>{rows.slice(0, 200).map((d, i) => (<div key={d.id} data-testid="og-dep-ligne" className="py-2 text-sm" style={{ borderTop: i > 0 ? "1px solid #F3EFE3" : "none", opacity: d.status === "annulé" ? 0.5 : 1, overflowWrap: "anywhere" }}>
               <div className="flex flex-wrap justify-between gap-2"><span><span className="text-xs" style={{ color: "#8A8370" }}>{ecDateFr(d.date)}</span> · <b>{d.label}</b></span><span className="tabular"><b>{ogM(d.amount)}</b> {d.status === "annulé" ? ecPastille("Annulée", "neutre") : d.mode === "apayer" ? (resteDep(d) > 0.004 ? ecPastille("À payer : " + ogM(resteDep(d)), "attente") : ecPastille("Payée", "ok")) : null}</span></div>
@@ -638,19 +652,19 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     membres.filter((m) => retardsMembre(m).length > 0).forEach((m) => { const r = retardsMembre(m); afaire.push({ tab: "membres", sel: m.id, nom: m.name, txt: "Cotisation en retard : " + r.map((p) => p.label).slice(0, 3).join(", ") + (r.length > 3 ? "…" : "") }); });
     actifs.forEach((f) => {
       const s = sFonds(f.id), bud = Number(f.budget) || 0;
-      if (bud > 0 && s.dep > bud + 0.004) afaire.push({ tab: "fonds", sel: f.id, nom: f.name, txt: "Budget dépassé de " + ogM(s.dep - bud) + " : informez le bailleur ou revoyez le budget" });
+      if (bud > 0 && s.dep > bud + 0.004) afaire.push({ tab: "fonds", sel: f.id, nom: f.name, txt: "Budget dépassé de " + ogM(s.dep - bud) + " : informez " + V.lBailleur + " ou revoyez le budget" });
       if (s.solde < -0.004) afaire.push({ tab: "fonds", sel: f.id, nom: f.name, txt: "Solde négatif (" + ogM(s.solde) + ") : des dépenses ont dépassé l'argent reçu pour ce fonds" });
-      if (f.end && f.end < today) afaire.push({ tab: "fonds", sel: f.id, nom: f.name, txt: s.solde > 0.004 ? "Projet échu avec " + ogM(s.solde) + " non dépensés : rendez compte au bailleur, virez le solde puis clôturez" : "Projet échu : établissez le rapport financier puis clôturez le fonds" });
+      if (f.end && f.end < today) afaire.push({ tab: "fonds", sel: f.id, nom: f.name, txt: s.solde > 0.004 ? "Projet échu avec " + ogM(s.solde) + " non dépensés : rendez compte à " + V.lBailleur.replace("le ", "au ") + ", virez le solde puis clôturez" : "Projet échu : établissez le rapport financier puis clôturez le fonds" });
     });
     depsOk.filter((d) => resteDep(d) > 0.004 && ogJours(d.date, today) > 30).forEach((d) => afaire.push({ tab: "depenses", sel: d.id, nom: d.supplier || d.label, txt: "Dépense du " + ecDateFr(d.date) + " à payer depuis plus de 30 jours : " + ogM(resteDep(d)) }));
     const etapes = [
       ["Type d'organisation", "Choisissez ci-dessus : ONG, association, église ou fondation. Les mots et les natures de recettes s'adaptent.", "apercu", !!orgType],
-      ["Fonds et projets", "Onglet Fonds et projets : créez un fonds par projet ou par bailleur (le reste va au fonds général).", "fonds", fonds.length > 0],
-      ["Donateurs et membres", "Enregistrez vos bailleurs, donateurs ou membres (facultatif pour les dons anonymes).", "contacts", contacts.length + membres.length > 0],
-      ["Premier don avec reçu", "Onglet Dons et reçus : enregistrez un don, la subvention ou l'offrande : le reçu numéroté s'imprime et la comptabilité se fait seule.", "dons", donsOk.length > 0],
+      ["Fonds et projets", "Onglet Fonds et projets : créez un fonds par projet ou par " + V.bailleur.toLowerCase() + " (le reste va au fonds général).", "fonds", fonds.length > 0],
+      ["Donateurs et membres", "Enregistrez vos " + V.contacts.toLowerCase() + " ou " + V.membres.toLowerCase() + " (facultatif pour les dons anonymes).", "contacts", contacts.length + membres.length > 0],
+      ["Premier don avec reçu", "Onglet " + V.recettes.split(" et reçus")[0] + " : " + V.guideDon + " : le reçu numéroté s'imprime et la comptabilité se fait seule.", "dons", donsOk.length > 0],
       ["Première dépense", "Onglet Dépenses : imputez la dépense à un fonds ; si elle dépasse le solde ou le budget, une raison est demandée.", "depenses", depsOk.length > 0],
       ["Budget d'un projet", "Dans Fonds et projets, donnez un budget à un projet pour suivre ce qui reste à dépenser.", "fonds", fonds.some((f) => Number(f.budget) > 0)],
-      ["Premier rapport financier", "Dans Fonds et projets, ouvrez un fonds puis « Rapport financier » : à remettre au bailleur ou au comité.", "fonds", !!cfg.rapportVu],
+      ["Premier rapport financier", "Dans Fonds et projets, ouvrez un fonds puis « Rapport financier » : à remettre à " + V.lBailleur.replace("le ", "au ") + " ou au comité.", "fonds", !!cfg.rapportVu],
     ];
     const toutFait = etapes.every((e) => e[3]);
     const kpis = [["Reçu ce mois", ogM(recuMois), "og-kpi-recu"], ["Dépensé ce mois", ogM(depMois), "og-kpi-dep"], ["Solde de tous les fonds", ogM(soldeTotal), "og-kpi-solde"], ["Fonds actifs", String(actifs.length), "og-kpi-fonds"], ["Membres actifs", String(membres.filter((m) => m.status !== "inactif").length), "og-kpi-membres"], ["Dépenses à payer", ogM(aPayer), "og-kpi-apayer"], ["Cotisations en retard", String(membres.filter((m) => retardsMembre(m).length > 0).length), "og-kpi-retard"], ["Choses à faire", String(afaire.length), "og-kpi-afaire"]];
@@ -658,7 +672,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     return (
       <div>
         {!orgType && canEdit && (<div className="ec-card p-4 mb-5" data-testid="og-type-carte"><div className="display text-base mb-1" style={{ color: "#152238" }}>Quel type d'organisation êtes-vous ?</div>
-          <div className="text-xs mb-2" style={{ color: "#8A8370" }}>Ce choix adapte les mots (bailleurs, fidèles, membres) et les natures de recettes proposées (subvention, dîme, offrande…). Vous pourrez le changer.</div>
+          <div className="text-xs mb-2" style={{ color: "#8A8370" }}>Ce choix adapte les mots (bailleurs, fidèles, membres…) et les natures de recettes proposées (subvention, collecte, dîme, offrande…). Vous pourrez le changer.</div>
           <div className="flex flex-wrap gap-2">{OG_TYPES.map((t) => <button key={t[0]} onClick={() => choisirType(t[0])} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid={"og-type-" + t[0]}>{t[1]}</button>)}</div></div>)}
         {orgType && canEdit && (<div className="text-xs mb-3" style={{ color: "#8A8370" }} data-testid="og-type-actuel">Type d'organisation : <b>{(OG_TYPES.find((t) => t[0] === orgType) || [0, ""])[1]}</b> · changer : <select value={orgType} onChange={(e) => choisirType(e.target.value)} data-testid="og-type-select" style={{ border: "1px solid #DDD6C4", borderRadius: 4, padding: "2px 4px", background: "#fff" }}>{OG_TYPES.map((t) => <option key={t[0]} value={t[0]}>{t[1]}</option>)}</select></div>)}
         {(<div className="ec-card p-4 mb-5" data-testid="og-guide">
@@ -699,7 +713,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     const attendu = ogR2(membres.reduce((s, m) => s + periodesMembre(m, ry).length * (Number(m.cotis) || 0), 0));
     const percu = ogR2(donsAnnee(ry).filter((d) => d.kind === "cotisation").reduce((s, d) => s + d.amount, 0));
     const exporterFonds = () => ecTelecharger("fonds-" + today + ".csv", [["Fonds", "Reçu (période)", "Dépensé (période)", "Solde actuel", "Budget"], ...lignesFonds.map((l) => [l.nom, l.recuP, l.depP, l.s.solde, l.f ? l.f.budget : ""])]);
-    const exporterDons = () => ecTelecharger("dons-par-donateur-" + ry + ".csv", [["Donateur", "Nombre de reçus", "Total", ...OG_RECETTES.map((r) => r[1])], ...dd.map((x) => [x.nom, x.n, x.total, ...OG_RECETTES.map((r) => x.kinds[r[0]] || 0)])]);
+    const exporterDons = () => ecTelecharger("dons-par-donateur-" + ry + ".csv", [["Donateur", "Nombre de reçus", "Total", ...OG_RECETTES.map((r) => natureDon(r[0]))], ...dd.map((x) => [x.nom, x.n, x.total, ...OG_RECETTES.map((r) => x.kinds[r[0]] || 0)])]);
     return (
       <div>
         <div className="flex flex-wrap gap-2 items-end mb-4"><div><label className="text-xs" style={{ color: "#8A8370" }}>Du</label><input type="date" value={rp.from} onChange={(e) => setRp({ ...rp, from: e.target.value })} data-testid="og-rp-du" className={ecInput} style={ecBorder} /></div>
@@ -714,7 +728,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
           <div className="ec-card p-4"><div className="display text-base mb-2" style={{ color: "#152238" }}>Recettes par nature</div>{Object.keys(parNatR).length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucune recette sur la période.</div> : Object.keys(parNatR).map((k) => (<div key={k} className="flex justify-between gap-2 py-1 text-sm" data-testid="og-rap-recette-ligne"><span>{k}</span><span className="tabular">{ogM(parNatR[k])}</span></div>))}</div>
           <div className="ec-card p-4"><div className="display text-base mb-2" style={{ color: "#152238" }}>Dépenses par nature</div>{Object.keys(parNatD).length === 0 ? <div className="text-sm" style={{ color: "#8A8370" }}>Aucune dépense sur la période.</div> : Object.keys(parNatD).map((k) => (<div key={k} className="flex justify-between gap-2 py-1 text-sm" data-testid="og-rap-depense-ligne"><span>{k}</span><span className="tabular">{ogM(parNatD[k])}</span></div>))}</div>
         </div>
-        <div className="ec-card p-4 mb-4" data-testid="og-rap-annuel"><div className="flex flex-wrap gap-2 items-end mb-2"><div className="display text-base" style={{ color: "#152238" }}>Rapport annuel des dons</div>
+        <div className="ec-card p-4 mb-4" data-testid="og-rap-annuel"><div className="flex flex-wrap gap-2 items-end mb-2"><div className="display text-base" style={{ color: "#152238" }}>{V.rapAnnuel}</div>
           <select value={ry} onChange={(e) => setRy(e.target.value)} data-testid="og-rap-annee" className={ecInput + " md:w-32"} style={ecBorder}>{[...new Set([annee, ...donsOk.map((d) => String(d.date).slice(0, 4))])].sort().reverse().map((y) => <option key={y} value={y}>{y}</option>)}</select>
           <button onClick={() => setImprimer({ kind: "annuel", year: ry })} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="og-rap-annuel-imprimer">Imprimer</button>
           <button onClick={exporterDons} className="px-3 py-2 rounded text-sm" style={ecBtn}>Exporter (CSV)</button></div>
@@ -796,7 +810,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
       <div style={cadre} data-testid="og-fonds-feuille">
         {entete("RAPPORT FINANCIER — " + nomFonds(id))}
         <div style={{ marginBottom: 4 }}>Période : du <b>{ecDateFr(from)}</b> au <b>{ecDateFr(to)}</b></div>
-        {f && f.bailleurId && <div style={{ marginBottom: 4 }}>Bailleur : <b>{nomContact(f.bailleurId)}</b></div>}
+        {f && f.bailleurId && <div style={{ marginBottom: 4 }}>{V.bailleur} : <b>{nomContact(f.bailleurId)}</b></div>}
         {bud > 0 && <div style={{ marginBottom: 4 }}>Budget du projet : <b>{ogM(bud)}</b> · dépensé depuis le début : <b>{ogM(s.dep)}</b> ({Math.round(s.dep * 100 / bud)} %)</div>}
         <div style={{ fontWeight: 700, margin: "10px 0 4px" }}>Recettes</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Date</th><th style={th}>Reçu</th><th style={th}>De la part de</th><th style={th}>Nature</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
@@ -826,12 +840,12 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     const th = { ...cellule, textAlign: "left", background: "#F4F1E6" };
     return (
       <div style={cadre} data-testid="og-annuel-feuille">
-        {entete("RAPPORT ANNUEL DES DONS " + year)}
+        {entete(V.rapAnnuel.toUpperCase() + " " + year)}
         <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Donateur</th><th style={{ ...th, textAlign: "right" }}>Reçus</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead>
           <tbody>{dd.map((x) => (<tr key={x.k}><td style={cellule}>{x.nom}</td><td style={{ ...cellule, textAlign: "right" }}>{x.n}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(x.total)}</td></tr>))}
             <tr style={{ fontWeight: 700 }}><td style={cellule}>Total {year}</td><td style={{ ...cellule, textAlign: "right" }}>{dd.reduce((s, x) => s + x.n, 0)}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(tot)}</td></tr></tbody></table>
         <div style={{ fontWeight: 700, margin: "12px 0 4px" }}>Par nature</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>{OG_RECETTES.map((r) => { const t = ogR2(dd.reduce((s, x) => s + (x.kinds[r[0]] || 0), 0)); return t > 0 ? (<tr key={r[0]}><td style={cellule}>{r[1]}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(t)}</td></tr>) : null; })}</tbody></table>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>{OG_RECETTES.map((r) => { const t = ogR2(dd.reduce((s, x) => s + (x.kinds[r[0]] || 0), 0)); return t > 0 ? (<tr key={r[0]}><td style={cellule}>{natureDon(r[0])}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(t)}</td></tr>) : null; })}</tbody></table>
         {signatures("Le trésorier", "Le président ou le responsable")}
       </div>
     );
@@ -856,13 +870,13 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   };
 
   const tabs = isVendeur
-    ? [["apercu", "Tableau de bord"], ["dons", "Dons et reçus"], ["contacts", V.contacts], ["membres", V.membres]]
-    : [["apercu", "Tableau de bord"], ["fonds", "Fonds et projets"], ["dons", "Dons et reçus"], ["contacts", V.contacts], ["membres", V.membres], ["depenses", "Dépenses"], ["rapports", "Rapports"], ["stats", "Statistiques"]];
+    ? [["apercu", "Tableau de bord"], ["dons", V.recettes], ["contacts", V.contacts], ["membres", V.membres]]
+    : [["apercu", "Tableau de bord"], ["fonds", "Fonds et projets"], ["dons", V.recettes], ["contacts", V.contacts], ["membres", V.membres], ["depenses", "Dépenses"], ["rapports", "Rapports"], ["stats", "Statistiques"]];
   const imprDoc = (() => {
     if (!imprimer) return null;
     if (imprimer.kind === "recu") { const d = dons.find((x) => x.id === imprimer.id); return d ? { titre: "Reçu " + d.number, node: <RecuSheet d={d} />, ticket: true } : null; }
     if (imprimer.kind === "fonds") { const f = fonds.find((x) => x.id === imprimer.id); return { titre: "Rapport financier", node: <FondsSheet id={imprimer.id || ""} from={imprimer.from || (f && f.start) || "2000-01-01"} to={imprimer.to || today} /> }; }
-    if (imprimer.kind === "annuel") return { titre: "Rapport annuel des dons " + imprimer.year, node: <AnnuelSheet year={imprimer.year} /> };
+    if (imprimer.kind === "annuel") return { titre: V.rapAnnuel + " " + imprimer.year, node: <AnnuelSheet year={imprimer.year} /> };
     if (imprimer.kind === "releve") return { titre: "Relevé des dons", node: <ReleveSheet k={imprimer.key} year={imprimer.year} /> };
     return null;
   })();

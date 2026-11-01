@@ -419,7 +419,7 @@ function asstHowToBlocs(f) {
     "ong-budget": { why: "Quand un projet dépasse son budget, le bailleur peut refuser de financer la différence : il faut le prévenir et justifier avant son rapport.", steps: [
       "Ouvrez l'espace ONG et associations → onglet « Fonds et projets » et ouvrez le projet indiqué.",
       "Contrôlez les dépenses imputées : erreur de fonds, doublon, dépense à rattacher à un autre projet ?",
-      "Si le dépassement est réel, informez le bailleur et demandez un avenant, ou prenez la différence sur le fonds général (virement entre fonds avec un motif)."] },
+      "Si le dépassement est réel, informez le bailleur (ou le comité) et demandez un avenant, ou prenez la différence sur le fonds général (virement entre fonds avec un motif)."] },
     "ong-fonds-clos": { why: "Un fonds clôturé doit être à zéro : un solde restant signifie de l'argent affecté qui n'est ni dépensé ni rendu.", steps: [
       "Ouvrez l'espace ONG et associations → onglet « Fonds et projets » et consultez le rapport financier du fonds.",
       "Si le solde est positif, convenez avec le bailleur de son sort (remboursement ou report) et enregistrez un virement vers le fonds convenu.",
