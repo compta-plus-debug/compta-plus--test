@@ -126,6 +126,11 @@ const seed=()=>[
  // ── Rapports et statistiques
  await g(p,'ag-tab-rapports').click();await p.waitForTimeout(500);
  ok('rapport de rentabilité des campagnes et de l\'élevage',(await g(p,'ag-rap-camp-ligne').count())===1&&(await g(p,'ag-rap-elevage-ligne').count())===2);
+ {const tc=await g(p,'ag-rap-camp-ligne').innerText();const te=await g(p,'ag-rap-elevage-ligne').first().innerText();
+  ok('coûts et marges par unité affichés avec 2 décimales (campagne, bande)',/\d,\d\d/.test(tc)&&/\d,\d\d/.test(te),[tc,te]);}
+ await g(p,'ag-tab-commandes').click();await p.waitForTimeout(300);
+ {const tx=await p.locator('main').first().innerText();ok('commandes : vocabulaire agricole (pas de gâteaux, fer forgé, gamme)',/Précommande/.test(tx)&&/Maïs de la récolte/.test(tx)&&!/Gâteaux|fer forgé|Uniformes|gamme/i.test(tx),tx.slice(0,300));}
+ await g(p,'ag-tab-rapports').click();await p.waitForTimeout(300);
  ok('rapport « ventes sous le coût » liste la vente à perte du maïs',(await g(p,'ag-rap-perte-ligne').count())>=1,await g(p,'ag-rap-perte-ligne').count());
  await g(p,'ag-tab-stats').click();await p.waitForTimeout(500);
  ok('statistiques affichées',/Ventes/.test(await p.locator('body').innerText()));
