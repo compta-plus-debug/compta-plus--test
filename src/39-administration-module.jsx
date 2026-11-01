@@ -1469,7 +1469,8 @@ function AdminModule({
             <button
               onClick={() => {
                 const header = "Date et heure,Utilisateur,Module,Action,Détail";
-                const escapeCsv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+                const sureCsv = (v) => { const t = String(v ?? ""); return typeof v === "string" && /^[=+\-@\t\r]/.test(t) && !/^-?\d+([.,]\d+)?$/.test(t) ? "'" + t : t; };
+                const escapeCsv = (v) => `"${sureCsv(v ?? "").replace(/"/g, '""')}"`;
                 const rows = histFiltered.map((a) => [
                   new Date(a.date).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "medium" }),
                   a.user, a.module, a.action, a.details,

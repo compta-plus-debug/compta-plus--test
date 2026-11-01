@@ -62,7 +62,7 @@ const OG_COMPTES = {
   "6613": { name: "Personnel temporaire et vacataires", type: "Charge" },
   "6283": { name: "Autres frais de fonctionnement", type: "Charge" },
 };
-const ogR2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const ogR2 = (n) => { const v = Math.round((Number(n) || 0) * 100) / 100; return Number.isFinite(v) && Math.abs(v) <= 1e11 ? v : 0; }; // montant démesuré ou illisible = 0 (refusé par les formulaires)
 const ogId = () => String(uid());
 const ogRows = (rows, type) => (rows || []).filter((r) => r && r.type === type);
 const ogNom = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -359,7 +359,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     const name = ffo.name.trim();
     if (!name) { showToast("Donnez un nom au fonds (ex. " + V.exFonds.replace(/…$/, "") + ")."); return; }
     if (lignesAJour("fonds").some((f) => ogNom(f.name) === ogNom(name)) || ogNom(name) === ogNom("Fonds général")) { showToast("Un fonds de ce nom existe déjà."); return; }
-    if (ffo.budget !== "" && !(Number(ffo.budget) > 0)) { showToast("Le budget doit être supérieur à zéro."); return; }
+    if (ffo.budget !== "" && !(Number(ffo.budget) > 0 && Number(ffo.budget) <= 1e11)) { showToast("Le budget doit être supérieur à zéro et raisonnable."); return; }
     if (ffo.start && ffo.end && ffo.end < ffo.start) { showToast("La fin du projet ne peut pas précéder son début."); return; }
     const id = ogId();
     ajouter({ type: "fonds", id, number: numero("FD", lignesAJour("fonds"), ffo.start || today), name, bailleurId: ffo.bailleurId, budget: ffo.budget === "" ? 0 : ogR2(ffo.budget), start: ffo.start, end: ffo.end, desc: ffo.desc.trim(), status: "actif" });
@@ -471,7 +471,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
   const enregistrerDon = () => {
     if (!canFront) return;
     const amount = ogR2(fdo.amount);
-    if (!(amount > 0)) { showToast("Indiquez le montant reçu (en gourdes)."); return; }
+    if (!(amount > 0)) { showToast("Indiquez un montant reçu valide (en gourdes, au plus 100 milliards)."); return; }
     if (!verifDate(fdo.date, "enregistrer ce don")) return;
     const fond = fonds.find((f) => f.id === fdo.fondId);
     if (fdo.fondId && (!fond || fond.status === "clos")) { showToast("Ce fonds est clôturé : choisissez-en un autre."); return; }
@@ -768,7 +768,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
       <div style={{ fontWeight: 700, fontSize: 18, marginTop: 10 }}>{titre}</div>
     </div>
   );
-  const cellule = { padding: "4px 6px", border: "1px solid #bbb" };
+  const cellule = { padding: "4px 6px", border: "1px solid #bbb", overflowWrap: "anywhere", wordBreak: "break-word" };
   const cadre = { color: "#152238", background: "#fff", fontFamily: "'Inter', sans-serif", fontSize: 12, width: "100%", maxWidth: 794, margin: "0 auto", padding: (typeof window !== "undefined" && window.innerWidth < 640) ? "16px 10px" : "32px 36px", boxSizing: "border-box" };
   const signatures = (a, b) => (<div style={{ display: "flex", justifyContent: "space-between", gap: 24, marginTop: 40 }}><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>{a}</div><div style={{ flex: 1, borderTop: "1px solid #152238", paddingTop: 4, textAlign: "center" }}>{b}</div></div>);
   const RecuSheet = ({ d }) => {
@@ -813,18 +813,18 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
         {f && f.bailleurId && <div style={{ marginBottom: 4 }}>{V.bailleur} : <b>{nomContact(f.bailleurId)}</b></div>}
         {bud > 0 && <div style={{ marginBottom: 4 }}>Budget du projet : <b>{ogM(bud)}</b> · dépensé depuis le début : <b>{ogM(s.dep)}</b> ({Math.round(s.dep * 100 / bud)} %)</div>}
         <div style={{ fontWeight: 700, margin: "10px 0 4px" }}>Recettes</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Date</th><th style={th}>Reçu</th><th style={th}>De la part de</th><th style={th}>Nature</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><thead><tr><th style={th}>Date</th><th style={th}>Reçu</th><th style={th}>De la part de</th><th style={th}>Nature</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
           <tbody>{rec.map((d) => (<tr key={d.id}><td style={cellule}>{ecDateFr(d.date)}</td><td style={cellule}>{d.number}</td><td style={cellule}>{donateur(d)}</td><td style={cellule}>{natureDon(d.kind)}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(d.amount)}</td></tr>))}
             {vin.map((v) => (<tr key={v.id}><td style={cellule}>{ecDateFr(v.date)}</td><td style={cellule}>—</td><td style={cellule}>Virement du fonds « {nomFonds(v.from)} »</td><td style={cellule}>{v.motif}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(v.amount)}</td></tr>))}
             {rec.length + vin.length === 0 && <tr><td style={cellule} colSpan={5}>Aucune recette sur la période.</td></tr>}
             <tr style={{ fontWeight: 700 }}><td style={cellule} colSpan={4}>Total des recettes</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(totR)}</td></tr></tbody></table>
         <div style={{ fontWeight: 700, margin: "12px 0 4px" }}>Dépenses par nature</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>{Object.keys(parNat).map((k) => (<tr key={k}><td style={cellule}>{k}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(parNat[k])}</td></tr>))}
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><tbody>{Object.keys(parNat).map((k) => (<tr key={k}><td style={cellule}>{k}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(parNat[k])}</td></tr>))}
           {vout.map((v) => (<tr key={v.id}><td style={cellule}>Virement vers « {nomFonds(v.to)} » : {v.motif}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(v.amount)}</td></tr>))}
           {dp.length + vout.length === 0 && <tr><td style={cellule}>Aucune dépense sur la période.</td><td style={cellule}></td></tr>}
           <tr style={{ fontWeight: 700 }}><td style={cellule}>Total des dépenses</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(totD)}</td></tr></tbody></table>
         <div style={{ fontWeight: 700, margin: "12px 0 4px" }}>Détail des dépenses</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Date</th><th style={th}>Détail</th><th style={th}>Fournisseur</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><thead><tr><th style={th}>Date</th><th style={th}>Détail</th><th style={th}>Fournisseur</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
           <tbody>{dp.map((d) => (<tr key={d.id}><td style={cellule}>{ecDateFr(d.date)}</td><td style={cellule}>{natureDep(d.kind)}{d.label && d.label !== natureDep(d.kind) ? " — " + d.label : ""}{d.depassement ? " (dépassement justifié : " + ((OG_MOTIFS.find((m) => m[0] === d.depassement.motif) || [0, ""])[1]) + (d.depassement.txt ? " — " + d.depassement.txt : "") + ")" : ""}</td><td style={cellule}>{d.supplier || "—"}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(d.amount)}</td></tr>))}</tbody></table>
         <div style={{ maxWidth: 360, marginLeft: "auto", marginTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Recettes de la période</span><span>{ogM(totR)}</span></div>
@@ -841,11 +841,11 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     return (
       <div style={cadre} data-testid="og-annuel-feuille">
         {entete(V.rapAnnuel.toUpperCase() + " " + year)}
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Donateur</th><th style={{ ...th, textAlign: "right" }}>Reçus</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><thead><tr><th style={th}>Donateur</th><th style={{ ...th, textAlign: "right" }}>Reçus</th><th style={{ ...th, textAlign: "right" }}>Total</th></tr></thead>
           <tbody>{dd.map((x) => (<tr key={x.k}><td style={cellule}>{x.nom}</td><td style={{ ...cellule, textAlign: "right" }}>{x.n}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(x.total)}</td></tr>))}
             <tr style={{ fontWeight: 700 }}><td style={cellule}>Total {year}</td><td style={{ ...cellule, textAlign: "right" }}>{dd.reduce((s, x) => s + x.n, 0)}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(tot)}</td></tr></tbody></table>
         <div style={{ fontWeight: 700, margin: "12px 0 4px" }}>Par nature</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>{OG_RECETTES.map((r) => { const t = ogR2(dd.reduce((s, x) => s + (x.kinds[r[0]] || 0), 0)); return t > 0 ? (<tr key={r[0]}><td style={cellule}>{natureDon(r[0])}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(t)}</td></tr>) : null; })}</tbody></table>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><tbody>{OG_RECETTES.map((r) => { const t = ogR2(dd.reduce((s, x) => s + (x.kinds[r[0]] || 0), 0)); return t > 0 ? (<tr key={r[0]}><td style={cellule}>{natureDon(r[0])}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(t)}</td></tr>) : null; })}</tbody></table>
         {signatures("Le trésorier", "Le président ou le responsable")}
       </div>
     );
@@ -859,7 +859,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
       <div style={cadre} data-testid="og-releve-feuille">
         {entete("RELEVÉ DES DONS " + year)}
         <div style={{ marginBottom: 8 }}>Donateur : <b>{nom}</b></div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><th style={th}>Date</th><th style={th}>Reçu</th><th style={th}>Nature</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}><thead><tr><th style={th}>Date</th><th style={th}>Reçu</th><th style={th}>Nature</th><th style={{ ...th, textAlign: "right" }}>Montant</th></tr></thead>
           <tbody>{mine.map((d) => (<tr key={d.id}><td style={cellule}>{ecDateFr(d.date)}</td><td style={cellule}>{d.number}</td><td style={cellule}>{natureDon(d.kind)}</td><td style={{ ...cellule, textAlign: "right" }}>{ogM(d.amount)}</td></tr>))}
             <tr style={{ fontWeight: 700 }}><td style={cellule} colSpan={3}>Total {year}</td><td style={{ ...cellule, textAlign: "right" }} data-testid="og-releve-total">{ogM(tot)}</td></tr></tbody></table>
         <div style={{ marginTop: 10 }}>Soit : <i>{ogEnLettres(tot)} {ogDevise(tot)}</i>.</div>
@@ -884,7 +884,7 @@ function OngModule({ suppliers, ong, setOng, entries, setEntries, accounts, setA
     <>
       {listes}
       <div className={"p-4 md:p-8 max-w-6xl" + (imprDoc ? " no-print" : "")} data-testid="ong-module">
-        <style>{EC_CSS + '[data-testid="ong-module"] .display.text-base{border-left:3px solid #C9A24B;padding-left:10px;margin-bottom:12px}[data-testid="ong-module"] input,[data-testid="ong-module"] select{background:#fff}'}</style>
+        <style>{EC_CSS + '[data-testid="ong-module"] .display.text-base{border-left:3px solid #C9A24B;padding-left:10px;margin-bottom:12px}[data-testid="ong-module"] input,[data-testid="ong-module"] select{background:#fff;max-width:100%;min-width:0}[data-testid="ong-module"] .grid>*{min-width:0}'}</style>
         <div className="mb-4"><div className="display text-2xl" style={{ color: "#152238" }}>{orgType === "eglise" ? "Église et communauté" : orgType === "association" ? "Association" : orgType === "fondation" ? "Fondation" : "ONG, associations, églises"}</div><div className="text-xs" style={{ color: "#8A8370" }}>Fonds et projets, dons et reçus, donateurs, membres et cotisations, dépenses, rapports pour les bailleurs</div></div>
         {!canFront && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }}>Consultation seule : votre rôle ne permet pas de modifier les données.</div>}
         {isVendeur && <div className="text-xs mb-3 p-2 rounded" style={{ background: "#F4F1E6", color: "#5B563F" }} data-testid="og-accueil-note">Accueil : vous pouvez enregistrer les donateurs, les membres, les dons et cotisations et imprimer les reçus. Fonds, dépenses, annulations et rapports sont réservés aux gestionnaires.</div>}
