@@ -70,4 +70,4 @@ Générée automatiquement. Pour chaque bloc : combien de lignes, de quels autre
 | 63-btp | 1597 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 64-industries | 1236 | 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 07-constantes-metier, 00-config | 12-application-principale |
 | 65-agriculture | 1694 | 07-constantes-metier, 60-ecoles-socle, 06-icones-et-graphiques, 55-statistiques, 10-formatage-impression-et-pdf, 08-composants-et-utilitaires, 00-config | 12-application-principale |
-| 66-ong | 898 | 07-constantes-metier, 60-ecoles-socle, 55-statistiques, 08-composants-et-utilitaires, 00-config | 12-application-principale |
+| 66-ong | 912 | 07-constantes-metier, 60-ecoles-socle, 55-statistiques, 08-composants-et-utilitaires, 00-config | 12-application-principale |

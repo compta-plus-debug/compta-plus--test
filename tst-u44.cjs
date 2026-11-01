@@ -113,6 +113,21 @@ await p.waitForTimeout(1600);
  await g(p,'og-tab-stats').click();await p.waitForTimeout(500);
  ok('statistiques affichées',(await g(p,'og-stat-recu').count())===1);
  await p.close();}
+// ── Association : collecte (jamais offrande) ; ONG : pas de dîme ni d'offrande ; vocabulaire propre à chaque type
+for(const [typ,att,interdit,titre] of [['association',/ollecte/,/ffrande|îme/,/Dons, collectes et reçus/],['ong',/ubvention/,/ffrande|îme/,/Dons, subventions et reçus/],['fondation',/arrain/,/ffrande|îme/,/Dons, subventions et reçus/],['eglise',/ffrande/,/ubvention/,/Dîmes, offrandes et reçus/]]){
+ const {p}=await boot(b,{settings:{companyName:'T',currency:'HTG'},primary:true,cats:{ong:[{type:'config',id:'cf',orgType:typ},...seed()]},pageInit:mk(['ong'],'Administrateur')});await p.waitForTimeout(1500);
+ await g(p,'og-tab-dons').click();await p.waitForTimeout(300);
+ const nn=(await g(p,'og-don-nature').locator('option').allInnerTexts()).join(' | ');
+ const corps=await g(p,'og-don-form').innerText();
+ ok(typ+' : natures de recettes adaptées',att.test(nn)&&!interdit.test(nn+' '+corps),nn+' || '+corps.slice(0,90));
+ ok(typ+' : onglet et titre de la liste adaptés',titre.test(await g(p,'og-tab-dons').innerText())&&!interdit.test(await g(p,'og-tab-dons').innerText()),await g(p,'og-tab-dons').innerText());
+ await g(p,'og-tab-depenses').click();await p.waitForTimeout(250);
+ const dn=(await g(p,'og-dep-nature').locator('option').allInnerTexts()).join(' | ');
+ ok(typ+' : natures de dépenses adaptées',typ==='eglise'?/Œuvres sociales/.test(dn)&&!/bénéficiaires/.test(dn):typ==='association'?/aux membres/.test(dn):typ==='fondation'?/Bourses/.test(dn):/bénéficiaires/.test(dn),dn);
+ await g(p,'og-tab-contacts').click();await p.waitForTimeout(250);
+ const sorts=(await g(p,'og-contact-sorte').locator('option').allInnerTexts()).join(' | ');
+ ok(typ+' : sortes de donateurs adaptées',typ==='eglise'?!/ailleur/.test(sorts):typ==='association'?/Financeur/.test(sorts):/ailleur/.test(sorts),sorts);
+ await p.close();}
 // ── Église : mots et natures de recettes
 {const {p}=await boot(b,{settings:{companyName:'Église',currency:'HTG'},primary:true,cats:{ong:[{type:'config',id:'cf',orgType:'eglise'},...seed()]},pageInit:mk(['ong'],'Administrateur')});await p.waitForTimeout(1600);
  await g(p,'og-tab-dons').click();await p.waitForTimeout(300);
