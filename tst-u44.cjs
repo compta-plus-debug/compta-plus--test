@@ -128,6 +128,29 @@ for(const [typ,att,interdit,titre] of [['association',/ollecte/,/ffrande|îme/,/
  const sorts=(await g(p,'og-contact-sorte').locator('option').allInnerTexts()).join(' | ');
  ok(typ+' : sortes de donateurs adaptées',typ==='eglise'?!/ailleur/.test(sorts):typ==='association'?/Financeur/.test(sorts):/ailleur/.test(sorts),sorts);
  await p.close();}
+// ── Petit écran (360 px) : aucun onglet ni document imprimé ne déborde
+{const long={type:'fonds',id:'f1',number:'FD-1',name:"Projet d'adduction d'eau potable et d'assainissement des quartiers de Port-au-Prince 2026",bailleurId:'c1',budget:1500000,start:(yr)+'-01-01',end:(yr)+'-12-31',status:'actif'};
+ const {p}=await boot(b,{settings:{companyName:'T',currency:'HTG'},primary:true,cats:{ong:[{type:'config',id:'cf',orgType:'ong'},{type:'contact',id:'c1',name:'Programme des Nations Unies pour le développement Haïti',kind:'bailleur'},long,{type:'don',id:'d1',number:'RC-'+yr+'-0001',date:today,kind:'subvention',donorId:'c1',fondId:'f1',amount:1200000.5,mode:'banque',entryId:'x',status:'valide'},{type:'dep',id:'e1',date:today,kind:'activites',label:'x',supplier:'Fournisseur avec un nom très long SARL',amount:300000,mode:'caisse',fondId:'f1',status:'valide',settlements:[]}]},pageInit:mk(['ong'],'Administrateur')});
+ await p.setViewportSize({width:360,height:740});await p.waitForTimeout(1500);
+ const larg=()=>p.evaluate(()=>({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}));
+ let pire=0;for(const t of ['apercu','fonds','dons','contacts','membres','depenses','rapports','stats']){await g(p,'og-tab-'+t).click();await p.waitForTimeout(350);const w=await larg();pire=Math.max(pire,w.sw-w.cw);}
+ ok('360 px : aucun onglet ne déborde',pire<=1,pire);
+ await g(p,'og-tab-rapports').click();await p.waitForTimeout(300);
+ await g(p,'og-rap-fonds-imprimer').nth(1).click();await p.waitForTimeout(450);
+ const ov=await p.evaluate(()=>{const o=document.querySelector('[data-testid="og-apercu-impression"]');return {s:o.scrollWidth,c:o.clientWidth}});
+ ok('360 px : le rapport financier ne déborde pas',ov.s<=ov.c+1,ov);
+ await p.close();}
+// ── Sécurité : export CSV sans formule exécutable, montants démesurés refusés, noms piégés sans effet
+{const {p}=await boot(b,{settings:{companyName:'T',currency:'HTG'},primary:true,cats:{ong:[{type:'config',id:'cf',orgType:'ong'},{type:'contact',id:'c1',name:'=HYPERLINK("http://x","y")',kind:'particulier'},{type:'don',id:'d1',number:'RC-1',date:today,kind:'don',donorId:'c1',fondId:'',amount:7,mode:'caisse',entryId:'x',status:'valide'}]},pageInit:mk(['ong'],'Administrateur')});await p.waitForTimeout(1500);
+ await g(p,'og-tab-dons').click();await p.waitForTimeout(300);
+ const dl=p.waitForEvent('download',{timeout:5000}).catch(()=>null);await p.getByRole('button',{name:/Exporter \(CSV\)/}).first().click();const d=await dl;
+ const txt=d?require('fs').readFileSync(await d.path(),'utf8'):'';
+ ok('export CSV : un nom commençant par = est neutralisé (pas de formule Excel)',/"'=HYPERLINK/.test(txt)&&!/"=HYPERLINK/.test(txt),txt.slice(0,200));
+ for(const v of ['1e308','999999999999999999999','-5']){await g(p,'og-don-montant').fill(v);await g(p,'og-don-nomlibre').fill('<img src=x onerror="window.__xss=1">');await g(p,'og-don-enregistrer').click();await p.waitForTimeout(250);}
+ ok('montants démesurés ou négatifs refusés',(await cat(p,'ong')).filter(r=>r.type==='don').length===1,(await cat(p,'ong')).filter(r=>r.type==='don').map(r=>r.amount));
+ await g(p,'og-don-montant').fill('12');await g(p,'og-don-enregistrer').click();await p.waitForTimeout(450);
+ ok('nom piégé (balise HTML) : affiché comme texte, aucun script exécuté',(await p.evaluate(()=>window.__xss||0))===0&&/<img src=x/.test(await g(p,'og-recu-feuille').first().innerText()));
+ await p.close();}
 // ── Église : mots et natures de recettes
 {const {p}=await boot(b,{settings:{companyName:'Église',currency:'HTG'},primary:true,cats:{ong:[{type:'config',id:'cf',orgType:'eglise'},...seed()]},pageInit:mk(['ong'],'Administrateur')});await p.waitForTimeout(1600);
  await g(p,'og-tab-dons').click();await p.waitForTimeout(300);
