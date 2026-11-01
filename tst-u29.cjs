@@ -121,8 +121,8 @@ const ouvrir=async(p)=>{await p.getByText('Hôtellerie',{exact:true}).last().cli
   await g(p,'hotel-format').click();await p.waitForTimeout(200);ok('format ticket',(await g(p,'hotel-ticket-feuille').count())>=1);
   await g(p,'hotel-apercu-fermer').click();await p.waitForTimeout(200);
   // arrivée avant la date prévue / chambre sale : vérifié via nouvelle réservation impossible ici ; factures
-  await tab(p,'factures');
-  ok('1 facture, total 5 260',(await g(p,'hotel-fact-ligne').count())===1&&re('5','260,00').test(await g(p,'hotel-fact-total-montant').innerText()));
+  await tab(p,'factures');await g(p,'hotel-fact-ligne').first().waitFor({timeout:15000}).catch(()=>{});await p.waitForTimeout(600);
+  ok('1 facture, total 5 260',(await g(p,'hotel-fact-ligne').count())===1&&re('5','260,00').test(await g(p,'hotel-fact-total-montant').innerText()),[await g(p,'hotel-fact-ligne').count(),await g(p,'hotel-fact-total-montant').innerText().catch(()=>'')]);
   // rapports
   await tab(p,'rapports');g(p,'hotel-rp-du');await g(p,'hotel-rp-du').fill(add(-5));await p.waitForTimeout(250);
   ok('journal : total 5 260, 2 nuitées',re('5','260,00').test(await g(p,'hotel-jt-total').innerText())&&(await g(p,'hotel-jt-nuits').innerText()).trim()==='2');
