@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Authentification
-// @depends HCAPTCHA_SITEKEY, LandingPage, clearMembershipCache, friendlyError, hlMeta, hlOffline
+// @depends CAPTCHA_SITEKEY, LandingPage, clearMembershipCache, friendlyError, hlMeta, hlOffline
 //   hlOfflineSession, hlOfflineWhyNot, sanitizeUserMessage, supabase, useEffect, useState
 // @exports AdminMfaEnforcer, AuthGate, SecurityPanel
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -153,13 +153,13 @@ function AuthGate({ children }) {
     const basePath = window.location.href.split(/[?#]/)[0];
     const inviteParam = new URLSearchParams(window.location.search).get("invite");
     const redirectTo = inviteParam ? `${basePath}?invite=${encodeURIComponent(inviteParam)}` : basePath;
-    if (HCAPTCHA_SITEKEY && !captchaToken) { setError("Cochez la case de vérification (« Je suis un humain ») avant de continuer."); return; }
+    if (CAPTCHA_SITEKEY && !captchaToken) { setError("Cochez la case de vérification (« Vérification anti-robot ») avant de continuer."); return; }
     const options = { emailRedirectTo: redirectTo };
-    if (HCAPTCHA_SITEKEY) options.captchaToken = captchaToken;
+    if (CAPTCHA_SITEKEY) options.captchaToken = captchaToken;
     const { error } = await supabase.auth.signInWithOtp({ email, options });
     if (error) {
       setError(friendlyError(error));
-      if (HCAPTCHA_SITEKEY) { setCaptchaToken(""); setCaptchaReset((n) => n + 1); } // un jeton ne sert qu'une fois
+      if (CAPTCHA_SITEKEY) { setCaptchaToken(""); setCaptchaReset((n) => n + 1); } // un jeton ne sert qu'une fois
     } else setSent(true);
   };
 
@@ -212,7 +212,7 @@ function AuthGate({ children }) {
             <>
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.com"
                 style={{ width: "100%", padding: 8, marginBottom: 12, border: "1px solid #DDD6C4", borderRadius: 4, boxSizing: "border-box" }} />
-              {HCAPTCHA_SITEKEY && <CaptchaBox onToken={setCaptchaToken} resetKey={captchaReset} />}
+              {CAPTCHA_SITEKEY && <CaptchaBox onToken={setCaptchaToken} resetKey={captchaReset} />}
               <button type="submit" style={{ width: "100%", padding: 10, background: "#152238", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
                 Recevoir le lien de connexion
               </button>
@@ -243,18 +243,18 @@ function AuthGate({ children }) {
 // si le compte a un facteur TOTP enregistré. Bloque l'accès à l'application tant que le
 // code n'est pas validé. Propose aussi un code de secours à usage unique en repli, pour
 // le cas où l'appareil habituel (avec l'application d'authentification) est perdu.
-// ─── Captcha (hCaptcha) ─── actif seulement si HCAPTCHA_SITEKEY est renseignée dans 00-config.
-function loadHcaptcha() {
+// ─── Captcha (Cloudflare Turnstile) ─── actif seulement si CAPTCHA_SITEKEY est renseignée dans 00-config.
+function loadTurnstile() {
   return new Promise((resolve, reject) => {
-    if (window.hcaptcha) return resolve(window.hcaptcha);
-    let sc = document.querySelector("script[data-hcaptcha]");
+    if (window.turnstile) return resolve(window.turnstile);
+    let sc = document.querySelector("script[data-turnstile]");
     if (!sc) {
       sc = document.createElement("script");
-      sc.src = "https://js.hcaptcha.com/1/api.js?render=explicit";
-      sc.async = true; sc.defer = true; sc.setAttribute("data-hcaptcha", "1");
+      sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      sc.async = true; sc.defer = true; sc.setAttribute("data-turnstile", "1");
       document.head.appendChild(sc);
     }
-    sc.addEventListener("load", () => resolve(window.hcaptcha));
+    sc.addEventListener("load", () => resolve(window.turnstile));
     sc.addEventListener("error", () => reject(new Error("captcha")));
   });
 }
@@ -264,11 +264,11 @@ function CaptchaBox({ onToken, resetKey }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    loadHcaptcha().then((h) => {
+    loadTurnstile().then((t) => {
       if (!alive || !ref.current || wid.current !== null) return;
-      wid.current = h.render(ref.current, {
-        sitekey: HCAPTCHA_SITEKEY, hl: "fr",
-        callback: (t) => onToken(t),
+      wid.current = t.render(ref.current, {
+        sitekey: CAPTCHA_SITEKEY, language: "fr",
+        callback: (tok) => onToken(tok),
         "expired-callback": () => onToken(""),
         "error-callback": () => onToken(""),
       });
@@ -276,7 +276,7 @@ function CaptchaBox({ onToken, resetKey }) {
     return () => { alive = false; };
   }, []);
   useEffect(() => {
-    if (resetKey && wid.current !== null && window.hcaptcha) { try { window.hcaptcha.reset(wid.current); } catch (e) {} }
+    if (resetKey && wid.current !== null && window.turnstile) { try { window.turnstile.reset(wid.current); } catch (e) {} }
   }, [resetKey]);
   return (
     <div style={{ marginBottom: 12 }} data-testid="captcha-box">

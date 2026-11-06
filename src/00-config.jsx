@@ -1,7 +1,7 @@
 // ═══ MODULE ═══
 // @module Config
 // @depends —
-// @exports APP_VERSION, ENV_PROD_REF, HCAPTCHA_SITEKEY, SUPABASE_ANON_KEY, SUPABASE_URL, useEffect
+// @exports APP_VERSION, CAPTCHA_SITEKEY, ENV_PROD_REF, SUPABASE_ANON_KEY, SUPABASE_URL, useEffect
 //   useMemo, useState
 // ═══ FIN DE L'EN-TÊTE ═══
 // Version "sans build" : pas d'imports ES module — React, ainsi que les icônes et
@@ -15,10 +15,10 @@ const SUPABASE_URL = "https://cnmmxpwlgovzbcfqaxqm.supabase.co";
 // livraison, en même temps que le cache-buster ?v=... d'index.html, pour pouvoir
 // vérifier en un coup d'œil dans l'app elle-même quelle version tourne réellement,
 // sans avoir besoin des outils développeur (peu pratiques sur mobile).
-const APP_VERSION = "20261105-323";
-// Clé publique hCaptcha (« sitekey », visible par tous, ce n'est PAS un secret). Vide = pas de captcha.
+const APP_VERSION = "20261106-324";
+// Clé publique Cloudflare Turnstile (« site key », visible par tous, ce n'est PAS un secret). Vide = pas de captcha.
 // Ne la renseigner qu'une fois la protection Captcha activée côté Supabase (Authentication > Attack Protection).
-const HCAPTCHA_SITEKEY = "";
+const CAPTCHA_SITEKEY = "";
 const SUPABASE_ANON_KEY = "sb_publishable_Ba1KJd2YY-eLaCy1FRECIA_C1DoyAjL";
 // K:ENV:START — garde-fou test/production : une copie publiée au mauvais endroit refuse de démarrer
 // (références coupées en deux : une recherche de texte dans un fichier ne doit trouver que la base réellement utilisée)
