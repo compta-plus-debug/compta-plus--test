@@ -1,7 +1,7 @@
 // ═══ MODULE ═══
 // @module Authentification
-// @depends LandingPage, clearMembershipCache, friendlyError, hlMeta, hlOffline, hlOfflineSession
-//   hlOfflineWhyNot, sanitizeUserMessage, supabase, useEffect, useState
+// @depends HCAPTCHA_SITEKEY, LandingPage, clearMembershipCache, friendlyError, hlMeta, hlOffline
+//   hlOfflineSession, hlOfflineWhyNot, sanitizeUserMessage, supabase, useEffect, useState
 // @exports AdminMfaEnforcer, AuthGate, SecurityPanel
 // ═══ FIN DE L'EN-TÊTE ═══
 // --- Écran de connexion (lien magique par email) ---
@@ -9,6 +9,8 @@ function AuthGate({ children }) {
   const [session, setSession] = useState(undefined);
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [error, setError] = useState("");
   const [showLogin, setShowLogin] = useState(() => new URLSearchParams(window.location.search).get("login") === "1");
   // Niveau d'authentification MFA de la session en cours : null = pas encore vérifié,
@@ -151,9 +153,14 @@ function AuthGate({ children }) {
     const basePath = window.location.href.split(/[?#]/)[0];
     const inviteParam = new URLSearchParams(window.location.search).get("invite");
     const redirectTo = inviteParam ? `${basePath}?invite=${encodeURIComponent(inviteParam)}` : basePath;
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
-    if (error) setError(friendlyError(error));
-    else setSent(true);
+    if (HCAPTCHA_SITEKEY && !captchaToken) { setError("Cochez la case de vérification (« Je suis un humain ») avant de continuer."); return; }
+    const options = { emailRedirectTo: redirectTo };
+    if (HCAPTCHA_SITEKEY) options.captchaToken = captchaToken;
+    const { error } = await supabase.auth.signInWithOtp({ email, options });
+    if (error) {
+      setError(friendlyError(error));
+      if (HCAPTCHA_SITEKEY) { setCaptchaToken(""); setCaptchaReset((n) => n + 1); } // un jeton ne sert qu'une fois
+    } else setSent(true);
   };
 
 
@@ -205,6 +212,7 @@ function AuthGate({ children }) {
             <>
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.com"
                 style={{ width: "100%", padding: 8, marginBottom: 12, border: "1px solid #DDD6C4", borderRadius: 4, boxSizing: "border-box" }} />
+              {HCAPTCHA_SITEKEY && <CaptchaBox onToken={setCaptchaToken} resetKey={captchaReset} />}
               <button type="submit" style={{ width: "100%", padding: 10, background: "#152238", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
                 Recevoir le lien de connexion
               </button>
@@ -235,6 +243,49 @@ function AuthGate({ children }) {
 // si le compte a un facteur TOTP enregistré. Bloque l'accès à l'application tant que le
 // code n'est pas validé. Propose aussi un code de secours à usage unique en repli, pour
 // le cas où l'appareil habituel (avec l'application d'authentification) est perdu.
+// ─── Captcha (hCaptcha) ─── actif seulement si HCAPTCHA_SITEKEY est renseignée dans 00-config.
+function loadHcaptcha() {
+  return new Promise((resolve, reject) => {
+    if (window.hcaptcha) return resolve(window.hcaptcha);
+    let sc = document.querySelector("script[data-hcaptcha]");
+    if (!sc) {
+      sc = document.createElement("script");
+      sc.src = "https://js.hcaptcha.com/1/api.js?render=explicit";
+      sc.async = true; sc.defer = true; sc.setAttribute("data-hcaptcha", "1");
+      document.head.appendChild(sc);
+    }
+    sc.addEventListener("load", () => resolve(window.hcaptcha));
+    sc.addEventListener("error", () => reject(new Error("captcha")));
+  });
+}
+function CaptchaBox({ onToken, resetKey }) {
+  const ref = React.useRef(null);
+  const wid = React.useRef(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadHcaptcha().then((h) => {
+      if (!alive || !ref.current || wid.current !== null) return;
+      wid.current = h.render(ref.current, {
+        sitekey: HCAPTCHA_SITEKEY, hl: "fr",
+        callback: (t) => onToken(t),
+        "expired-callback": () => onToken(""),
+        "error-callback": () => onToken(""),
+      });
+    }).catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (resetKey && wid.current !== null && window.hcaptcha) { try { window.hcaptcha.reset(wid.current); } catch (e) {} }
+  }, [resetKey]);
+  return (
+    <div style={{ marginBottom: 12 }} data-testid="captcha-box">
+      <div ref={ref} />
+      {failed && <p style={{ color: "#A6432F", fontSize: 12 }}>La vérification anti-robot n'a pas pu se charger. Vérifiez votre connexion (ou désactivez le bloqueur de publicités) puis rechargez la page.</p>}
+    </div>
+  );
+}
+
 // Message d'erreur 2FA : texte clair pour la personne + « référence » technique discrète
 // (code et message du service d'authentification) pour que le support puisse trouver la vraie cause.
 function mfaErr(err, fallback) {
@@ -395,11 +446,13 @@ function SecurityPanel({ onClose, showToast, forced, onEnrolled }) {
       // serveur et bloque toute nouvelle tentative avec l'erreur "factor already
       // exists" — on le retire silencieusement avant de réessayer.
       const { data: existingFactors } = await supabase.auth.mfa.listFactors();
-      const unverified = (existingFactors?.totp || []).filter((f) => f.status !== "verified");
+      // Attention : listFactors().totp ne contient QUE les facteurs vérifiés ; les facteurs
+      // orphelins (non vérifiés) ne sont visibles que dans .all.
+      const unverified = (existingFactors?.all || existingFactors?.totp || []).filter((f) => f.status !== "verified");
       for (const f of unverified) {
         await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
       }
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Compta+ " + new Date().toISOString().slice(0, 19) });
       if (error) throw error;
       setEnrolling({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
     } catch (err) {
