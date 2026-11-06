@@ -235,6 +235,24 @@ function AuthGate({ children }) {
 // si le compte a un facteur TOTP enregistré. Bloque l'accès à l'application tant que le
 // code n'est pas validé. Propose aussi un code de secours à usage unique en repli, pour
 // le cas où l'appareil habituel (avec l'application d'authentification) est perdu.
+// Message d'erreur 2FA : texte clair pour la personne + « référence » technique discrète
+// (code et message du service d'authentification) pour que le support puisse trouver la vraie cause.
+function mfaErr(err, fallback) {
+  let d = "";
+  try { d = [err && (err.code || err.status), err && err.message].filter(Boolean).join(" — ").slice(0, 160); } catch (e) {}
+  return friendlyError(err, fallback) + (d ? "\n§" + d : "");
+}
+function MfaErrorText({ error }) {
+  const i = String(error).indexOf("\n§");
+  const msg = i >= 0 ? String(error).slice(0, i) : String(error);
+  const ref = i >= 0 ? String(error).slice(i + 2) : "";
+  return (
+    <div style={{ marginTop: 8 }}>
+      <p style={{ color: "#A6432F", fontSize: 12 }}>{sanitizeUserMessage(msg)}</p>
+      {ref && <p data-testid="mfa-ref" style={{ color: "#8A8370", fontSize: 11, marginTop: 4 }}>Référence : {ref}</p>}
+    </div>
+  );
+}
 function MfaChallengeScreen({ onVerified, onSignOut }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -257,7 +275,7 @@ function MfaChallengeScreen({ onVerified, onSignOut }) {
       if (verifyErr) throw verifyErr;
       await onVerified();
     } catch (err) {
-      setError(friendlyError(err, "Code invalide."));
+      setError(mfaErr(err, "Code invalide."));
     } finally {
       setVerifying(false);
     }
@@ -297,7 +315,7 @@ function MfaChallengeScreen({ onVerified, onSignOut }) {
           <button type="submit" disabled={verifying || !backupCode.trim()} style={{ width: "100%", padding: 10, background: "#152238", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", opacity: verifying || !backupCode.trim() ? 0.6 : 1 }}>
             {verifying ? "Vérification…" : "Valider"}
           </button>
-          {error && <p style={{ color: "#A6432F", fontSize: 12, marginTop: 8 }}>{sanitizeUserMessage(error)}</p>}
+          {error && <MfaErrorText error={error} />}
           <button type="button" onClick={() => { setUseBackup(false); setError(""); }} style={{ background: "none", border: "none", color: "#8A8370", fontSize: 12, marginTop: 16, cursor: "pointer", padding: 0, display: "block" }}>
             ← Revenir au code à 6 chiffres
           </button>
@@ -323,7 +341,7 @@ function MfaChallengeScreen({ onVerified, onSignOut }) {
         <button type="submit" disabled={verifying || code.length !== 6} style={{ width: "100%", padding: 10, background: "#152238", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", opacity: verifying || code.length !== 6 ? 0.6 : 1 }}>
           {verifying ? "Vérification…" : "Vérifier"}
         </button>
-        {error && <p style={{ color: "#A6432F", fontSize: 12, marginTop: 8 }}>{sanitizeUserMessage(error)}</p>}
+        {error && <MfaErrorText error={error} />}
         <button type="button" onClick={() => { setUseBackup(true); setError(""); }} style={{ background: "none", border: "none", color: "#5C6B8C", fontSize: 12, marginTop: 16, cursor: "pointer", padding: 0, display: "block" }}>
           Appareil habituel perdu ? Utiliser un code de secours
         </button>
@@ -385,7 +403,7 @@ function SecurityPanel({ onClose, showToast, forced, onEnrolled }) {
       if (error) throw error;
       setEnrolling({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
     } catch (err) {
-      setError(friendlyError(err, "Impossible de démarrer l'activation."));
+      setError(mfaErr(err, "Impossible de démarrer l'activation."));
     } finally {
       setBusy(false);
     }
@@ -406,7 +424,7 @@ function SecurityPanel({ onClose, showToast, forced, onEnrolled }) {
       loadFactors();
       await generateBackupCodes();
     } catch (err) {
-      setError(friendlyError(err, "Code invalide, réessayez."));
+      setError(mfaErr(err, "Code invalide, réessayez."));
     } finally {
       setBusy(false);
     }
@@ -502,7 +520,7 @@ function SecurityPanel({ onClose, showToast, forced, onEnrolled }) {
                 Activer la double authentification
               </button>
             )}
-            {error && <p style={{ color: "#A6432F", fontSize: 12, marginTop: 8 }}>{sanitizeUserMessage(error)}</p>}
+            {error && <MfaErrorText error={error} />}
             {!verifiedFactor && (
               <p style={{ fontSize: 11, color: "#A39C87", marginTop: 16 }}>
                 Des codes de secours à usage unique vous seront proposés juste après l'activation, pour le cas où vous perdriez l'appareil habituel.
@@ -535,7 +553,7 @@ function SecurityPanel({ onClose, showToast, forced, onEnrolled }) {
             <button type="button" onClick={cancelEnroll} className="mt-2 underline block" style={{ color: "#8A8370", fontSize: 12, background: "none", border: "none", cursor: "pointer", marginTop: 8 }}>
               Annuler
             </button>
-            {error && <p style={{ color: "#A6432F", fontSize: 12, marginTop: 8 }}>{sanitizeUserMessage(error)}</p>}
+            {error && <MfaErrorText error={error} />}
           </form>
         )}
       </div>
