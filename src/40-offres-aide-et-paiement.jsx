@@ -50,7 +50,7 @@ const PAYMENT_METHODS = [
 // progression (Groupe) quelle que soit la valeur de son propre plan_tier — ce
 // champ ne décrit que le niveau de fonctionnalités de CETTE entreprise
 // (Standard/Assisté), indépendant de son appartenance à un groupe.
-function UpgradeModal({ onClose, planTier, groupId, groupName, showToast }) {
+function UpgradeModal({ onClose, planTier, groupId, groupName, showToast, planStatus, trialEndsAt }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [htgRate, setHtgRate] = useState(null);
@@ -80,6 +80,33 @@ function UpgradeModal({ onClose, planTier, groupId, groupName, showToast }) {
         method: "POST",
         headers: { Authorization: `Bearer ${s.access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ companyId, amount, targetTier: nextTier }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.redirectUrl) throw new Error(data.error || "Réponse invalide du service de paiement");
+      window.location.href = data.redirectUrl;
+    } catch (e) {
+      setError(friendlyError(e));
+      setLoading(false);
+    }
+  };
+
+  // v335 — payer son forfait actuel sans attendre la fin de l'essai (ou les derniers jours de l'abonnement).
+  // Sans forfait cible : le serveur applique le prix du forfait en cours et fait partir 30 jours de la date de paiement.
+  const joursRestants = trialEndsAt ? Math.max(0, Math.ceil((new Date(trialEndsAt) - new Date()) / 86400000)) : null;
+  const peutPayerMaintenant = !inGroup && (planStatus === "trial" || (planStatus === "active" && joursRestants !== null && joursRestants <= 7));
+  const payerMaintenant = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { companyId } = await resolveMembership();
+      const tf = await fetchBillingTarif();
+      const amount = Math.round((tarifPrixUsd(tf, planTier) * (tf.rate || htgRate || FALLBACK_HTG_PER_USD)) / 10) * 10;
+      try { sessionStorage.removeItem("compta-plus-upgrade-target"); } catch (e) {}
+      const { data: { session: s } } = await supabase.auth.getSession();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/moncash?action=create`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${s.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, amount }),
       });
       const data = await res.json();
       if (!res.ok || !data.redirectUrl) throw new Error(data.error || "Réponse invalide du service de paiement");
@@ -140,6 +167,19 @@ function UpgradeModal({ onClose, planTier, groupId, groupName, showToast }) {
             </div>
           ) : (
             <>
+              {peutPayerMaintenant && (
+                <div data-testid="upg-payer-carte" style={{ border: "1px solid #CFE3DC", background: "#F3FAF7", borderRadius: 8, padding: 16, marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#152238", marginBottom: 4 }}>Payer mon forfait {currentInfo.label} maintenant</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#0F6B5C", marginBottom: 8 }}>{tarifPrixUsd(tarif, planTier)} $/mois</div>
+                  <p style={{ fontSize: 12, color: "#7A7460", marginBottom: 10 }}>
+                    {planStatus === "trial" ? "Votre essai gratuit" : "Votre abonnement"}{joursRestants !== null ? ` se termine dans ${joursRestants} jour${joursRestants > 1 ? "s" : ""}` : " est en cours"}. En payant maintenant, votre abonnement de 30 jours démarre aujourd'hui : les jours restants ne s'ajoutent pas.
+                  </p>
+                  <button onClick={payerMaintenant} disabled={loading} data-testid="upg-payer-maintenant"
+                    style={{ background: "#0F6B5C", color: "#fff", border: "none", borderRadius: 6, padding: "10px 16px", fontSize: 14, cursor: loading ? "default" : "pointer", width: "100%", opacity: loading ? 0.6 : 1 }}>
+                    {loading ? "Redirection…" : `Payer ${toHtg(tarifPrixUsd(tarif, planTier)).toLocaleString("fr-FR")} HTG avec MonCash`}
+                  </button>
+                </div>
+              )}
               {nextInfo && (
                 <div style={{ border: "1px solid #E4DFD1", borderRadius: 8, padding: 16, marginBottom: 14 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#152238", marginBottom: 4 }}>Passer au forfait {nextInfo.label}</div>
