@@ -70,14 +70,26 @@ const initCo=(o)=>{const S=window.__srv;S.tables.billing_settings=o.bs?[o.bs]:[]
   ok('essai : montant 2 800 HTG (20 USD × 140) et mention des jours restants',/Payer 2\s800 HTG avec MonCash/.test(await g(p,'upg-payer-carte').innerText())&&/se termine dans (9|10) jours/.test(await g(p,'upg-payer-carte').innerText()),await g(p,'upg-payer-carte').innerText());
   await g(p,'upg-payer-maintenant').click();await p.waitForTimeout(800);
   ok('essai : demande envoyée, montant 2800, sans forfait cible',calls.length===1&&calls[0].body.amount===2800&&calls[0].body.targetTier===undefined,calls);
-  ok('essai : la mise à niveau reste proposée en dessous',/Passer au forfait/.test(await p.evaluate(()=>document.body.innerText)));
+  ok('essai : fenêtre « Payer mon forfait » sans la carte du forfait supérieur',await g(p,'upg-carte-superieur').count()===0&&/Payer mon forfait/.test(await p.evaluate(()=>document.body.innerText)));
+  await p.getByText('×',{exact:true}).first().click();await p.waitForTimeout(300);await g(p,'side-mise-a-niveau').click();await p.waitForTimeout(700);
+  ok('essai : lien « Mise à niveau » = forfait supérieur seul, sans la carte de paiement du forfait en cours',await g(p,'upg-carte-superieur').count()===1&&await g(p,'upg-payer-carte').count()===0);
+  await g(p,'upg-mise-a-niveau').click();await p.waitForTimeout(150);
  } else ok('essai : lien « Payer mon forfait maintenant » dans la barre latérale',false,(await p.evaluate(()=>document.body.innerText)).slice(0,400));
  ok('aucune erreur de page (paiement pendant l\'essai)',errs.length===0,errs.slice(0,2));await p.context().close();}
+// G2 — v336 : seul le bouton cliqué affiche « Redirection »
+{const fin=new Date(Date.now()+10*86400000).toISOString().slice(0,10);
+ const {p}=await boot(b,{settings:{companyName:'X'},pageInit:mk((o)=>{const S=window.__srv;S.tables.billing_settings=[];S.tables.companies=[{id:'c1',name:'Lakay SA',plan_status:'trial',plan_tier:'standard',trial_ends_at:o.fin,security_pin_hash:null,group_id:null}];},{fin}),onPage:(pg)=>{marche(pg,132);pg.route('**/functions/v1/moncash**',r=>setTimeout(()=>r.fulfill({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"error":"test"}'}),1500));}});
+ await p.waitForTimeout(700);await g(p,'side-mise-a-niveau').click();await p.waitForTimeout(600);
+ await g(p,'upg-mise-a-niveau').click();await p.waitForTimeout(500);
+ ok('clic sur la mise à niveau : ce bouton affiche « Redirection en cours… » et il est désactivé',/Redirection en cours/.test(await g(p,'upg-mise-a-niveau').innerText())&&await g(p,'upg-mise-a-niveau').isDisabled());
+ await p.context().close();}
 // H — abonnement actif loin de l'échéance : pas de paiement anticipé ; à 3 jours : proposé
 for(const [j,attendu] of [[20,0],[3,1]]){const fin=new Date(Date.now()+j*86400000).toISOString().slice(0,10);
  const {p}=await boot(b,{settings:{companyName:'X'},pageInit:mk((o)=>{const S=window.__srv;S.tables.billing_settings=[];S.tables.companies=[{id:'c1',name:'Lakay SA',plan_status:'active',plan_tier:'standard',trial_ends_at:o.fin,security_pin_hash:null,group_id:null}];},{fin}),onPage:(pg)=>marche(pg,132)});
  await p.waitForTimeout(700);
  ok('abonnement actif, '+j+' jours restants : lien de paiement '+(attendu?'affiché':'absent'),await g(p,'side-payer-maintenant').count()===attendu);
- await p.getByText('Mise à niveau',{exact:true}).first().click();await p.waitForTimeout(600);
- ok('abonnement actif, '+j+' jours restants : carte de paiement '+(attendu?'affichée':'absente'),await g(p,'upg-payer-carte').count()===attendu);await p.context().close();}
+ if(attendu){await g(p,'side-payer-maintenant').click();await p.waitForTimeout(600);
+  ok('abonnement actif, '+j+' jours restants : carte de paiement affichée',await g(p,'upg-payer-carte').count()===1);}
+ else{await g(p,'side-mise-a-niveau').click();await p.waitForTimeout(600);
+  ok('abonnement actif, '+j+' jours restants : aucune carte de paiement anticipé',await g(p,'upg-payer-carte').count()===0&&await g(p,'upg-carte-superieur').count()===1);}await p.context().close();}
 await b.close();console.log(fails?('ECHECS fails='+fails):'TOUT PASSE fails=0');process.exit(fails?1:0)})();
