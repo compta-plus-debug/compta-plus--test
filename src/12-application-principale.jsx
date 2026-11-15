@@ -2732,7 +2732,7 @@ function App() {
             </div>
           )}
           {role === "Administrateur" && !groupId && (planStatus === "trial" || (planStatus === "active" && trialDaysLeft !== null && trialDaysLeft <= 7)) && (
-            <button onClick={() => setShowUpgradeModal(true)} data-testid="side-payer-maintenant" className="mt-1 underline block font-medium" style={{ color: "#7FD1BD" }}>
+            <button onClick={() => setShowUpgradeModal("payer")} data-testid="side-payer-maintenant" className="mt-1 underline block font-medium" style={{ color: "#7FD1BD" }}>
               Payer mon forfait maintenant
             </button>
           )}
@@ -2760,7 +2760,7 @@ function App() {
             )}
           </button>
           {role === "Administrateur" && (
-            <button onClick={() => setShowUpgradeModal(true)} className="mt-1 underline flex items-center gap-1.5" style={{ color: "#8A97B5" }}>
+            <button onClick={() => setShowUpgradeModal("upgrade")} data-testid="side-mise-a-niveau" className="mt-1 underline flex items-center gap-1.5" style={{ color: "#8A97B5" }}>
               <Boxes size={13} /> Mise à niveau
             </button>
           )}
@@ -2787,7 +2787,7 @@ function App() {
       {role === "Administrateur" && secteurs.ok && !secteurs.locked && !secteursSkip && !needsWelcome && !isBlocked && secteursDroits(secteurs, { planTier, groupId, planStatus }).inclus && active !== "superadmin" && active !== "centredegestion" && active !== "groupdashboard" && (
         <SecteursChoixModal companyId={secteurs.companyId} showToast={showToast} onClose={() => setSecteursSkip(true)} onSaved={() => loadSecteursInfo(secteurs.companyId).then(setSecteurs)} />
       )}
-      {showUpgradeModal && <UpgradeModal onClose={() => setShowUpgradeModal(false)} planTier={planTier} groupId={groupId} groupName={groupName} showToast={showToast} planStatus={planStatus} trialEndsAt={trialEndsAt} />}
+      {showUpgradeModal && <UpgradeModal onClose={() => setShowUpgradeModal(false)} planTier={planTier} groupId={groupId} groupName={groupName} showToast={showToast} planStatus={planStatus} trialEndsAt={trialEndsAt} mode={showUpgradeModal === "payer" ? "payer" : "upgrade"} />}
 
       {/* Main */}
       <main className="flex-1 min-w-0">
