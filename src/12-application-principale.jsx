@@ -327,42 +327,26 @@ function App() {
   const createAdditionalCompany = async () => {
     if (!newCompanyName.trim()) { showToast("Entrez un nom d'entreprise."); return; }
     setCreatingCompany(true);
-    let createdCompanyId = null;
     try {
       const trimmedName = newCompanyName.trim();
-      const { data: clash } = await supabase.from("companies").select("id").ilike("name", trimmedName).maybeSingle();
-      if (clash) {
-        showToast(`Le nom « ${trimmedName} » est déjà utilisé par une autre entreprise — choisissez-en un autre.`);
+      // v337 — la création passe désormais par la fonction serveur create-company (règles de nom,
+      // unicité sans tenir compte de la casse, limite d'essais), jamais directement depuis le navigateur.
+      let deviceId = null;
+      try {
+        deviceId = localStorage.getItem("compta-plus-device-id");
+        if (!deviceId) { deviceId = genInviteToken(); localStorage.setItem("compta-plus-device-id", deviceId); }
+      } catch (e) {}
+      const { data: created, error: createErr } = await invokeEdgeFunction("create-company", { deviceId, companyName: trimmedName, additional: true });
+      if (createErr) {
+        const msg = String(createErr);
+        showToast(msg);
+        window.alert("Échec de la création de l'entreprise.\n\n" + msg);
         return;
       }
-      const { data: { user } } = await supabase.auth.getUser();
-      // Même principe que pour l'inscription normale : générer l'id nous-mêmes
-      // pour ne jamais avoir besoin de relire la ligne juste après (voir le
-      // commentaire détaillé sur resolveMembership plus haut dans ce fichier).
-      const newCompanyId = crypto.randomUUID();
-      const { error: companyErr } = await supabase.from("companies").insert({ id: newCompanyId, name: trimmedName });
-      if (companyErr) throw new Error("La création de l'entreprise n'a pas pu aboutir. " + NET_MSG);
-      createdCompanyId = newCompanyId;
-      const { error: memberErr } = await supabase.from("company_members").insert({
-        company_id: newCompanyId, user_id: user.id, email: user.email, role: "Administrateur", is_primary_admin: true,
-      });
-      if (memberErr) {
-        // L'entreprise a bien été créée mais le rattachement a échoué — on la
-        // supprime aussitôt plutôt que de laisser une entreprise orpheline, sans
-        // aucun membre, invisible depuis nulle part sauf la liste brute de Super
-        // Admin (exactement ce qui s'est produit la première fois : "Toris & co."
-        // est resté créé mais totalement inaccessible).
-        await supabase.from("companies").delete().eq("id", newCompanyId);
-        throw new Error("La création de l'entreprise n'a pas pu aboutir (rien n'a été conservé). " + NET_MSG);
-      }
-      // Pré-remplit le nom dans les paramètres de l'entreprise (kv_store) avec celui
-      // saisi ici — sans ça, le nom n'existe QUE dans companies.name (visible
-      // seulement depuis Super Admin) ; le reste de l'app (barre latérale, factures,
-      // Administration) lit settings.companyName, une donnée totalement séparée qui
-      // resterait bloquée sur la valeur générique "Mon Entreprise" par défaut tant
-      // que personne ne passe par l'écran de bienvenue (qui ne se déclenche pas ici).
-      // Écrit directement pour CETTE entreprise précise (newCompanyId) plutôt que via
-      // window.storage.set(), qui résoudrait encore l'ancienne entreprise en cache.
+      const newCompanyId = created && created.companyId;
+      if (!newCompanyId) { showToast("La création n'a pas abouti. Réessayez plus tard."); return; }
+      // Pré-remplit le nom dans les paramètres de la nouvelle entreprise (sinon la barre latérale
+      // et les factures afficheraient le nom générique par défaut).
       try {
         await supabase.from("kv_store").upsert({
           company_id: newCompanyId, key: "compta-settings",
@@ -1893,7 +1877,7 @@ function App() {
         } catch (e) {}
         const { data: createResult, error: createError } = await invokeEdgeFunction("create-company", { deviceId, companyName: name });
         if (createError) {
-          if (/essai|support@|d[ée]j[àa] utilis/i.test(String(createError))) {
+          if (/essai|support@|d[ée]j[àa] utilis|adresse email|au moins 2 caract|administrateur|nom de l'entreprise/i.test(String(createError))) {
             // Refus volontaire du serveur (limite d'essais, adresse temporaire…) : message clair et durable.
             setWelcomeError(String(createError));
           } else {
