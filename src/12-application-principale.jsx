@@ -2317,11 +2317,11 @@ function App() {
             </div>
           )}
 
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3 min-w-0 w-full">
             {isPlatformAdmin && (
               <button onClick={() => { setPlatformLanding(false); setActive("superadmin"); }}
-                className="text-left rounded-lg p-5 flex items-center justify-between" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
-                <div>
+                className="w-full min-w-0 text-left rounded-lg p-5 flex items-center justify-between gap-3" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
+                <div className="min-w-0">
                   <div className="font-semibold" style={{ color: "#152238" }}>Plateforme — Super Admin</div>
                   <div className="text-xs mt-0.5" style={{ color: "#5C6B4A" }}>Abonnements, revenus, historique global, rapports</div>
                 </div>
@@ -2331,8 +2331,8 @@ function App() {
 
             {isGroupOwner && (
               <button onClick={() => { setPlatformLanding(false); setActive("groupdashboard"); }}
-                className="text-left rounded-lg p-5 flex items-center justify-between" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
-                <div>
+                className="w-full min-w-0 text-left rounded-lg p-5 flex items-center justify-between gap-3" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
+                <div className="min-w-0">
                   <div className="font-semibold flex items-center gap-2" style={{ color: "#152238" }}>
                     Groupe — {groupName}
                     {pendingGroupRequests > 0 && (
@@ -2349,8 +2349,8 @@ function App() {
 
             {isManagementCollaborator && (
               <button onClick={() => { setPlatformLanding(false); setActive("centredegestion"); }}
-                className="text-left rounded-lg p-5 flex items-center justify-between" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
-                <div>
+                className="w-full min-w-0 text-left rounded-lg p-5 flex items-center justify-between gap-3" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
+                <div className="min-w-0">
                   <div className="font-semibold flex items-center gap-2" style={{ color: "#152238" }}>
                     Centre de gestion
                     {inboxUnreadApp > 0 && (
@@ -2375,9 +2375,9 @@ function App() {
               try { sessionStorage.setItem("compta_skip_landing", "1"); } catch (e) {}
               window.location.reload();
             }}
-              className="text-left rounded-lg p-5 flex items-center justify-between" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
-              <div>
-                <div className="font-semibold" style={{ color: "#152238" }}>Ouvrir mon entreprise{settings.companyName ? " — " + settings.companyName : ""}</div>
+              className="w-full min-w-0 text-left rounded-lg p-5 flex items-center justify-between gap-3" style={{ background: "linear-gradient(160deg, #F4FBE8 0%, #DFF0BE 55%, #C7E296 100%)" }}>
+              <div className="min-w-0">
+                <div className="font-semibold break-all" style={{ color: "#152238" }}>Ouvrir mon entreprise{settings.companyName ? " — " + settings.companyName : ""}</div>
                 <div className="text-xs mt-0.5" style={{ color: "#5C6B4A" }}>Comptabilité, ventes, stock — les 9 modules habituels</div>
               </div>
               <span style={{ color: "#3B5C1F" }}>→</span>
