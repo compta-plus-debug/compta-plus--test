@@ -15,7 +15,9 @@ const allowFn="S.fnH={'create-company':async function(o){S.lastCheck=o.body;retu
  ok('A : aucun groupe créé',await p.evaluate(()=>window.__srv.tables.company_groups.length)===0);
  ok('A : aucune erreur JS',errs.length===0,errs.slice(0,3));await p.close();}
 // B) Groupe : autorisé -> vérification envoyée avec checkOnly puis groupe créé
-{const {p,errs}=await boot(b,{skipSeed:true,pageInit:noMember(allowFn+"S.tables.company_groups=[];")});
+// v339 : la création de groupe passe par la fonction serveur create-group (simulée ici comme le serveur la ferait)
+const groupFn="S.fnH['create-group']=async function(o){var id='g'+Math.random().toString(36).slice(2);S.tables.company_groups.push({id:id,owner_user_id:'u1',name:o.body.name,plan_status:'trial'});return {data:{success:true,groupId:id,groupName:o.body.name,groupMaxCompanies:5},error:null}};";
+{const {p,errs}=await boot(b,{skipSeed:true,pageInit:noMember(allowFn+groupFn+"S.tables.company_groups=[];")});
  await p.locator('input[placeholder*="Nom de l\'entreprise"]').fill('Mon Groupe');
  await p.locator('[data-testid="welcome-phone"]').fill('509 3712 3456');
  await p.getByText('Extension',{exact:false}).first().click();
