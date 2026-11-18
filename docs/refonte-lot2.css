@@ -9,10 +9,12 @@
 
 /* Tableaux du tableau de bord : en-tête bleu, lignes alternées, survol doux */
 main .compta-accueil table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 main .compta-accueil table thead tr { background: #152238; }
+main .compta-accueil table thead th { background: #152238 !important; color: #EFE9DD !important; }
 main .compta-accueil table thead th {
   color: #EFE9DD;
   font-weight: 600;
