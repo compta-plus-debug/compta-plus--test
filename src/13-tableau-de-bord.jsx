@@ -230,11 +230,27 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
   const soldeMin = Math.min(0, ...serieTreso.map((p) => p.solde));
   const soldeMax = Math.max(0, ...serieTreso.map((p) => p.solde));
   const plage = soldeMax - soldeMin || 1;
-  const coords = serieTreso.map((p, i) => {
-    const x = serieTreso.length > 1 ? (i / (serieTreso.length - 1)) * 600 : 0;
-    const y = 180 - ((p.solde - soldeMin) / plage) * 160;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
+  // Courbe lissée, même style que la maquette « Market » (aire en dégradé, trait ardoise, point or).
+  const pts = serieTreso.map((p, i) => [
+    serieTreso.length > 1 ? (i / (serieTreso.length - 1)) * 594 : 0,
+    170 - ((p.solde - soldeMin) / plage) * 150,
+  ]);
+  const cheminLisse = (q) => {
+    if (q.length < 2) return "";
+    let d = `M${q[0][0].toFixed(1)},${q[0][1].toFixed(1)}`;
+    for (let i = 0; i < q.length - 1; i++) {
+      const p0 = q[i - 1] || q[i], p1 = q[i], p2 = q[i + 1], p3 = q[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      const borne = (y) => Math.min(170, Math.max(10, y)); // le lissage ne doit pas dépasser les bornes du graphique
+      d += ` C${c1x.toFixed(1)},${borne(c1y).toFixed(1)} ${c2x.toFixed(1)},${borne(c2y).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    return d;
+  };
+  const traitTreso = cheminLisse(pts);
+  const aireTreso = pts.length > 1 ? `${traitTreso} L600,180 L0,180 Z` : "";
+  const repereTreso = [0, 1, 2, 3, 4].map((k) => serieTreso[Math.round((k * (serieTreso.length - 1)) / 4)]).filter(Boolean);
+  const dernierPoint = pts[pts.length - 1];
   const ventes30 = (() => {
     const out = [];
     for (let i = 29; i >= 0; i--) {
@@ -347,15 +363,24 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
         {tresorerieJour.length === 0 ? (
           <div className="text-sm py-16 text-center" style={{ color: "#A39C87" }}>Aucun mouvement de banque ou de caisse pour le moment.</div>
         ) : (
-          <svg viewBox="0 0 600 200" preserveAspectRatio="none" className="w-full h-48" role="img" aria-label="Courbe du solde de trésorerie">
-            <line x1="0" x2="600" y1="180" y2="180" stroke="#E4DFD1" strokeWidth="1" />
-            <polyline points={coords.join(" ")} fill="none" stroke="#152238" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          <svg viewBox="0 0 600 180" preserveAspectRatio="none" className="w-full h-48" role="img" aria-label="Courbe du solde de trésorerie" style={{ display: "block", overflow: "visible" }}>
+            <defs>
+              <linearGradient id="grad-tresorerie" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor="#152238" stopOpacity=".34" />
+                <stop offset="1" stopColor="#152238" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <line x1="0" x2="600" y1="45" y2="45" stroke="#E6EDF7" />
+            <line x1="0" x2="600" y1="90" y2="90" stroke="#E6EDF7" />
+            <line x1="0" x2="600" y1="135" y2="135" stroke="#E6EDF7" />
+            <path d={aireTreso} fill="url(#grad-tresorerie)" />
+            <path d={traitTreso} fill="none" stroke="#3F5A85" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {dernierPoint && <circle cx={dernierPoint[0]} cy={dernierPoint[1]} r="6" fill="#C9A24B" stroke="#fff" strokeWidth="3" />}
           </svg>
         )}
-        <div className="flex justify-between text-xs mt-2" style={{ color: "#A39C87" }}>
-          <span>{serieTreso[0] ? serieTreso[0].label : ""}</span>
-          <span className="tabular" style={{ color: "#152238" }}>Solde actuel : {fmt(serieTreso.length ? serieTreso[serieTreso.length - 1].solde : 0)}</span>
-          <span>{serieTreso.length ? serieTreso[serieTreso.length - 1].label : ""}</span>
+        <div className="text-xs mt-1 tabular" style={{ color: "#152238" }}>Solde actuel : {fmt(serieTreso.length ? serieTreso[serieTreso.length - 1].solde : 0)}</div>
+        <div className="flex justify-between text-xs mt-1" style={{ color: "#5B6B7F" }}>
+          {repereTreso.map((r, i) => <span key={i}>{r.label}</span>)}
         </div>
       </div>
 
@@ -370,8 +395,8 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
             data={chartData}
             xKey="mois"
             series={[
-              { key: "produits", name: "Produits", color: "#0F6B5C" },
-              { key: "charges", name: "Charges", color: "#A6432F" },
+              { key: "produits", name: "Produits", color: "#3F5A85" },
+              { key: "charges", name: "Charges", color: "#C9A24B" },
             ]}
           />
         )}
@@ -383,7 +408,7 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
           {chargesRepartition.length === 0 ? (
             <div className="text-sm py-10 text-center" style={{ color: "#A39C87" }}>Aucune charge enregistrée.</div>
           ) : (
-            <SimpleDonutChart data={chargesRepartition} nameKey="name" valueKey="value" colors={["#152238", "#C9A24B", "#0F6B5C", "#7F94B6", "#B9C7DD"]} />
+            <SimpleDonutChart data={chargesRepartition} nameKey="name" valueKey="value" colors={["#152238", "#7F94B6", "#C9A24B", "#3F5A85", "#A9BFE3"]} />
           )}
         </div>
         <div className="bg-white rounded-lg p-6 min-w-0 md:col-span-2 overflow-x-auto" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-ecritures">
@@ -453,7 +478,7 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
               const step = 600 / ventes30.length;
               return ventes30.map((v, i) => {
                 const h = (v.produits / max) * 180;
-                return <rect key={i} x={i * step + step * 0.2} y={200 - h} width={step * 0.6} height={h} fill="#0F6B5C"><title>{v.mois} : {fmt(v.produits)}</title></rect>;
+                return <rect key={i} x={i * step + step * 0.2} y={200 - h} width={step * 0.6} height={h} fill="#3F5A85"><title>{v.mois} : {fmt(v.produits)}</title></rect>;
               });
             })()}
           </svg>
