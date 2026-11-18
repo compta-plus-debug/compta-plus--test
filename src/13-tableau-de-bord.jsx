@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Tableau de bord
-// @depends Download, SimpleGroupedBarChart, SimpleGrowthBarChart, balanceDue, fmt, normalizeClientName
+// @depends Download, SimpleDonutChart, SimpleGroupedBarChart, SimpleGrowthBarChart, balanceDue, fmt, normalizeClientName
 //   useState
 // @exports Card, Dashboard
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -206,7 +206,7 @@ function GettingStartedCard({ setActive, settings, setSettings, products, client
 }
 // K:ONB:END
 
-function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, installPrompt, onInstallClick, setActive, settings, setSettings, products, clients, planTier, invoices, role }) {
+function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, installPrompt, onInstallClick, setActive, settings, setSettings, products, clients, planTier, invoices, role, recentEntries = [], chargesRepartition = [] }) {
   const [showIosHelp, setShowIosHelp] = useState(false);
   const alreadyInstalled = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
   return (
@@ -247,6 +247,20 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
           </div>
         )}
       </header>
+
+      <div className="rounded-2xl p-6 mb-6 flex items-center justify-between gap-4 flex-wrap" style={{ background: "linear-gradient(120deg,#152238,#1F4E9A)" }} data-testid="accueil-une">
+          <div>
+            <div className="text-xs uppercase tracking-widest" style={{ color: "#E8C97A" }}>À la une{latestGrowth ? " · " + latestGrowth.mois : ""}</div>
+            <div className="display text-2xl mt-1" style={{ color: "#fff" }}>
+              {!latestGrowth || latestGrowth.pct === null
+                ? `Votre journal compte ${entriesCount} écriture${entriesCount > 1 ? "s" : ""} enregistrée${entriesCount > 1 ? "s" : ""}.`
+                : latestGrowth.croissance >= 0
+                  ? `Votre activité du mois est en avance de ${latestGrowth.pct.toFixed(1)} %`
+                  : `Votre activité du mois est en retrait de ${Math.abs(latestGrowth.pct).toFixed(1)} %`}
+            </div>
+          </div>
+          <button onClick={() => setActive?.("compta")} className="px-5 py-2 rounded-lg text-sm font-semibold" style={{ background: "#C9A24B", color: "#152238" }}>Voir le détail</button>
+      </div>
 
       <GettingStartedCard setActive={setActive} settings={settings} setSettings={setSettings} products={products} clients={clients} invoices={invoices} role={role} />
       <FiscalDeadlinesCard setActive={setActive} taxSystem={settings.taxSystem} planTier={planTier} />
@@ -296,6 +310,68 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
           />
         )}
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded-lg p-6 min-w-0" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-repartition">
+          <div className="text-sm font-semibold mb-4" style={{ color: "#152238" }}>Répartition des charges</div>
+          {chargesRepartition.length === 0 ? (
+            <div className="text-sm py-10 text-center" style={{ color: "#A39C87" }}>Aucune charge enregistrée.</div>
+          ) : (
+            <SimpleDonutChart data={chargesRepartition} nameKey="name" valueKey="value" colors={["#152238", "#C9A24B", "#0F6B5C", "#7F94B6", "#B9C7DD"]} />
+          )}
+        </div>
+        <div className="bg-white rounded-lg p-6 min-w-0 md:col-span-2 overflow-x-auto" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-ecritures">
+          <div className="text-sm font-semibold mb-3" style={{ color: "#152238" }}>Dernières écritures</div>
+          {recentEntries.length === 0 ? (
+            <div className="text-sm py-10 text-center" style={{ color: "#A39C87" }}>Aucune écriture pour le moment.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: "#152238", background: "#EEF2F8" }} className="text-left">
+                  <th className="px-3 py-2" style={{ color: "#152238" }}>Date</th><th className="px-3 py-2" style={{ color: "#152238" }}>Libellé</th><th className="px-3 py-2" style={{ color: "#152238" }}>Statut</th><th className="px-3 py-2 text-right" style={{ color: "#152238" }}>Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentEntries.map((e) => (
+                  <tr key={e.id} style={{ borderTop: "1px solid #EEE9DA" }}>
+                    <td className="px-3 py-2 whitespace-nowrap">{/^\d{4}-\d{2}-\d{2}$/.test(e.date || "") ? e.date.split("-").reverse().join("/") : (e.date || "")}</td>
+                    <td className="px-3 py-2">{e.label}</td>
+                    <td className="px-3 py-2">{e.corrigee ? "Corrigée" : "Enregistrée"}</td>
+                    <td className="px-3 py-2 text-right tabular">{fmt(e.montant)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {(() => {
+        const aujourdhui = new Date();
+        const retards = (invoices || []).filter((inv) => {
+          if (["payée", "annulée", "don", "perte"].includes(inv.status)) return false;
+          if (balanceDue(inv) <= 0.01) return false;
+          return Math.floor((aujourdhui - new Date(inv.date)) / 86400000) > 30;
+        }).length;
+        const stockBas = (products || []).filter((p) => p.type === "marchandise" && Number(p.seuil) > 0 && Number(p.stock || 0) <= Number(p.seuil)).length;
+        const items = [];
+        if (retards > 0) items.push({ texte: `Relancer ${retards} facture${retards > 1 ? "s" : ""} en retard`, module: "crm" });
+        if (stockBas > 0) items.push({ texte: `Stock bas : ${stockBas} produit${stockBas > 1 ? "s" : ""} à réapprovisionner`, module: "stock" });
+        return (
+          <div className="bg-white rounded-lg p-6 mb-8" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-a-traiter">
+            <div className="text-sm font-semibold mb-3" style={{ color: "#152238" }}>À traiter</div>
+            {items.length === 0 ? (
+              <div className="text-sm" style={{ color: "#A39C87" }}>Rien à traiter pour le moment.</div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {items.map((it) => (
+                  <button key={it.texte} onClick={() => setActive?.(it.module)} className="text-left text-sm px-3 py-2 rounded-lg" style={{ background: "#FBF1DC", color: "#152238" }}>{it.texte}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }}>
         <div className="text-sm font-semibold mb-1" style={{ color: "#152238" }}>Croissance du chiffre d'affaires par mois</div>

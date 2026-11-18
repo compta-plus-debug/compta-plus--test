@@ -1606,6 +1606,35 @@ function App() {
   }, [chartData]);
   const latestGrowth = growthData.length ? growthData[growthData.length - 1] : null;
 
+  // Accueil (maquette « Market ») : cinq dernières écritures et répartition des charges par compte.
+  const recentEntries = useMemo(() => {
+    return [...entries]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || "").localeCompare(a.createdAt || ""))
+      .slice(0, 5)
+      .map((e) => ({
+        id: e.id,
+        date: e.date,
+        label: e.label || "Écriture",
+        montant: (e.lines || []).reduce((sum, l) => sum + Number(l.debit || 0), 0),
+        corrigee: /\(corrigée\)$/.test(e.label || ""),
+      }));
+  }, [entries]);
+
+  const chargesRepartition = useMemo(() => {
+    const parCompte = {};
+    entries.forEach((e) => (e.lines || []).forEach((l) => {
+      const acc = accounts.find((a) => a.code === l.account);
+      if (acc?.type !== "Charge") return;
+      const nom = acc.name || acc.code;
+      parCompte[nom] = (parCompte[nom] || 0) + (Number(l.debit || 0) - Number(l.credit || 0));
+    }));
+    const tries = Object.entries(parCompte).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const top = tries.slice(0, 4).map(([name, value]) => ({ name, value }));
+    const reste = tries.slice(4).reduce((sum, [, v]) => sum + v, 0);
+    if (reste > 0) top.push({ name: "Autres", value: reste });
+    return top;
+  }, [entries, accounts]);
+
   // Deux blocs distincts mais cohabitant dans la même application : le bloc
   // "Plateforme" (Super Admin) et le bloc "Entreprise" (les 9 modules comptables).
   // isBlocked ne s'applique JAMAIS au bloc Plateforme, quel que soit le statut
@@ -2802,6 +2831,8 @@ function App() {
             planTier={planTier}
             invoices={invoices}
             role={role}
+            recentEntries={recentEntries}
+            chargesRepartition={chargesRepartition}
           />
         )}
         {active === "groupdashboard" && groupId && isGroupOwner && (
