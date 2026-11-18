@@ -1,0 +1,41 @@
+/* ==========================================================================
+   Compta+ — Refonte visuelle, LOT 2b : tableau de bord (Centre de contrôle)
+   --------------------------------------------------------------------------
+   Apparence seule, dans <main>. Aucun JavaScript, aucune donnée, aucune règle
+   d'accès ne change. Ce lot ajoute : indicateurs en tuiles colorées, panneaux
+   plus arrondis, et graphiques recolorés selon la maquette « Market ».
+   Retour arrière : supprimer la ligne <link ... refonte-lot2b.css>.
+   ========================================================================== */
+
+/* Indicateurs (Produits, Charges, Résultat, Trésorerie) : tuiles avec filet coloré */
+main .grid.grid-cols-2.md\:grid-cols-4 > div {
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(20, 69, 143, .07);
+  padding: 18px 20px;
+  border-top: 3px solid #7F94B6;
+}
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(1) { border-top-color: #0F6B5C; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(2) { border-top-color: #A6432F; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(3) { border-top-color: #C9A24B; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(4) { border-top-color: #3F5A85; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div > div:first-child {
+  letter-spacing: .08em;
+  font-size: 11px;
+}
+main .grid.grid-cols-2.md\:grid-cols-4 > div > div:last-child {
+  font-size: 26px;
+  font-weight: 500;
+}
+
+/* Panneaux du tableau de bord : coins plus doux, titres en police d'entête */
+main .bg-white.rounded-lg.p-6,
+main .bg-white.rounded-lg.p-4 {
+  border-radius: 18px;
+  box-shadow: 0 2px 10px rgba(20, 69, 143, .07);
+}
+
+/* Graphiques : couleurs de la maquette (courbe bleu ardoise, barres bleu pâle et or) */
+main svg [fill="#0F6B5C"] { fill: #7F94B6 !important; }
+main svg [fill="#A6432F"] { fill: #B9C7DD !important; }
+main svg [stroke="#0F6B5C"] { stroke: #3F5A85 !important; }
+main svg [stroke="#A6432F"] { stroke: #C9A24B !important; }
