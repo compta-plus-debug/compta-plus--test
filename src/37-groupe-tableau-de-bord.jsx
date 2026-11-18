@@ -241,7 +241,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl compta-groupe">
       <div className="rounded-lg p-6 mb-6 flex items-center justify-between flex-wrap gap-3"
         style={{ background: "linear-gradient(135deg, #152238 0%, #1F3358 100%)" }}>
         <div>
