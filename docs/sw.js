@@ -3,7 +3,7 @@
 // tant que la connexion est disponible, même si le cache HTTP classique du
 // navigateur (différent du Cache Storage ci-dessous) tenterait de s'interposer.
 
-const CACHE_NAME = "compta-plus-cache-v3";
+const CACHE_NAME = "compta-plus-cache-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
