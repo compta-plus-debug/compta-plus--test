@@ -1,0 +1,66 @@
+/* ==========================================================================
+   Compta+ — Refonte visuelle, LOT 2 : tableaux et cartes (contenu principal)
+   --------------------------------------------------------------------------
+   Ce fichier ne change que l'apparence. Il ne modifie ni le JavaScript, ni les
+   données, ni les règles d'accès. Il s'applique uniquement dans la balise <main>.
+   Les tableaux des blocs par secteur (classe .ec-table) gardent leur feuille de
+   style d'origine : seuls les autres tableaux prennent la même présentation.
+   Pour revenir en arrière : supprimer la ligne <link ... refonte-lot2.css>
+   dans le fichier HTML (voir LISEZ-MOI).
+   ========================================================================== */
+
+/* Tableaux généraux : en-tête bleu, lignes alternées, survol doux */
+main table:not(.ec-table) {
+  border-collapse: collapse;
+  font-size: 14px;
+}
+main table:not(.ec-table) thead tr {
+  background: #152238;
+}
+main table:not(.ec-table) thead th {
+  color: #EFE9DD;
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+main table:not(.ec-table) tbody td {
+  padding: 9px 12px;
+  vertical-align: middle;
+}
+main table:not(.ec-table) tbody tr {
+  border-top: 1px solid #EEE9DA;
+}
+main table:not(.ec-table) tbody tr:nth-child(even) {
+  background: #FAF8F1;
+}
+main table:not(.ec-table) tbody tr:hover {
+  background: #F3EFE0;
+}
+
+/* Montants et quantités : chiffres alignés, colonnes droites */
+main table td.text-right,
+main table th.text-right {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Défilement horizontal sur téléphone : jamais de page qui déborde */
+main .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* Cartes et panneaux blancs : bordure douce, coins arrondis, ombre légère */
+main .bg-white.rounded-lg {
+  border: 1px solid #E4DFD1;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(21, 34, 56, .07);
+}
+
+/* Titres de section dans le contenu : séparateur or, même style que les blocs par secteur */
+main .display.text-base {
+  border-left: 3px solid #C9A24B;
+  padding-left: 10px;
+}
