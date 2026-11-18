@@ -2819,7 +2819,7 @@ function App() {
       {showUpgradeModal && <UpgradeModal onClose={() => setShowUpgradeModal(false)} planTier={planTier} groupId={groupId} groupName={groupName} showToast={showToast} planStatus={planStatus} trialEndsAt={trialEndsAt} mode={showUpgradeModal === "payer" ? "payer" : "upgrade"} />}
 
       {/* Main */}
-      <main className="flex-1 min-w-0">
+      <main className={"flex-1 min-w-0" + (["resto", "btp", "indus", "services", "ong", "agri", "immo", "transport", "hotel", "sante", "impex", "ecole"].includes(active) ? " compta-bloc" : "")}>
         {isBlocked && active !== "superadmin" && active !== "centredegestion" && active !== "groupdashboard" ? (
           <div className="p-4 md:p-8 max-w-lg">
             <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }}>
