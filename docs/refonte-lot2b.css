@@ -9,15 +9,15 @@
 
 /* Indicateurs (Produits, Charges, Résultat, Trésorerie) : tuiles avec filet coloré */
 main .grid.grid-cols-2.md\:grid-cols-4 > div {
-  border-radius: 16px;
-  box-shadow: 0 2px 10px rgba(20, 69, 143, .07);
-  padding: 18px 20px;
-  border-top: 3px solid #7F94B6;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 12px rgba(20, 69, 143, .09) !important;
+  padding: 18px 20px !important;
+  border-top: 4px solid #7F94B6 !important;
 }
-main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(1) { border-top-color: #0F6B5C; }
-main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(2) { border-top-color: #A6432F; }
-main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(3) { border-top-color: #C9A24B; }
-main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(4) { border-top-color: #3F5A85; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(1) { border-top-color: #0F6B5C !important; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(2) { border-top-color: #A6432F !important; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(3) { border-top-color: #C9A24B !important; }
+main .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(4) { border-top-color: #3F5A85 !important; }
 main .grid.grid-cols-2.md\:grid-cols-4 > div > div:first-child {
   letter-spacing: .08em;
   font-size: 11px;
