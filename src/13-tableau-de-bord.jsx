@@ -251,13 +251,15 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
   const aireTreso = pts.length > 1 ? `${traitTreso} L600,180 L0,180 Z` : "";
   const repereTreso = [0, 1, 2, 3, 4].map((k) => serieTreso[Math.round((k * (serieTreso.length - 1)) / 4)]).filter(Boolean);
   const dernierPoint = pts[pts.length - 1];
+  // Une couleur par jour de la semaine (palette de la maquette, distincte d'un jour à l'autre).
+  const COULEURS_JOURS = ["#152238", "#3F5A85", "#7F94B6", "#C9A24B", "#1FA97A", "#A9BFE3", "#A6432F"];
   const ventes30 = (() => {
     const out = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const iso = isoLocal(d);
       const hit = ventesJour.find((v) => v.jour === iso);
-      out.push({ mois: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`, produits: hit ? hit.produits : 0 });
+      out.push({ mois: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`, produits: hit ? hit.produits : 0, jourSem: d.getDay() });
     }
     return out;
   })();
@@ -478,7 +480,7 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
               const step = 600 / ventes30.length;
               return ventes30.map((v, i) => {
                 const h = (v.produits / max) * 180;
-                return <rect key={i} x={i * step + step * 0.2} y={200 - h} width={step * 0.6} height={h} fill="#3F5A85"><title>{v.mois} : {fmt(v.produits)}</title></rect>;
+                return <rect key={i} x={i * step + step * 0.2} y={200 - h} width={step * 0.6} height={h} fill={COULEURS_JOURS[v.jourSem]}><title>{v.mois} : {fmt(v.produits)}</title></rect>;
               });
             })()}
           </svg>
