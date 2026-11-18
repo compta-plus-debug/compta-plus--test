@@ -1635,6 +1635,35 @@ function App() {
     return top;
   }, [entries, accounts]);
 
+  // Lot 2c (maquette « Market ») : solde cumulé de trésorerie (comptes 512 et 530) jour par jour,
+  // et ventes (Produits nets) par jour. Calculé à partir des seules écritures existantes.
+  const tresorerieJour = useMemo(() => {
+    const parJour = {};
+    entries.forEach((e) => {
+      const jour = (e.date || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(jour)) return;
+      (e.lines || []).forEach((l) => {
+        if (l.account !== "512" && l.account !== "530") return;
+        parJour[jour] = (parJour[jour] || 0) + Number(l.debit || 0) - Number(l.credit || 0);
+      });
+    });
+    let cumul = 0;
+    return Object.keys(parJour).sort().map((jour) => { cumul += parJour[jour]; return { jour, solde: cumul }; });
+  }, [entries]);
+
+  const ventesJour = useMemo(() => {
+    const parJour = {};
+    entries.forEach((e) => {
+      const jour = (e.date || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(jour)) return;
+      (e.lines || []).forEach((l) => {
+        const acc = accounts.find((a) => a.code === l.account);
+        if (acc?.type === "Produit") parJour[jour] = (parJour[jour] || 0) + Number(l.credit || 0) - Number(l.debit || 0);
+      });
+    });
+    return Object.keys(parJour).sort().map((jour) => ({ jour, produits: parJour[jour] }));
+  }, [entries, accounts]);
+
   // Deux blocs distincts mais cohabitant dans la même application : le bloc
   // "Plateforme" (Super Admin) et le bloc "Entreprise" (les 9 modules comptables).
   // isBlocked ne s'applique JAMAIS au bloc Plateforme, quel que soit le statut
@@ -2832,6 +2861,8 @@ function App() {
             invoices={invoices}
             role={role}
             recentEntries={recentEntries}
+            tresorerieJour={tresorerieJour}
+            ventesJour={ventesJour}
             chargesRepartition={chargesRepartition}
           />
         )}

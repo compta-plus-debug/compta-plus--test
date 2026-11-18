@@ -206,11 +206,48 @@ function GettingStartedCard({ setActive, settings, setSettings, products, client
 }
 // K:ONB:END
 
-function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, installPrompt, onInstallClick, setActive, settings, setSettings, products, clients, planTier, invoices, role, recentEntries = [], chargesRepartition = [] }) {
+function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, installPrompt, onInstallClick, setActive, settings, setSettings, products, clients, planTier, invoices, role, recentEntries = [], chargesRepartition = [], tresorerieJour = [], ventesJour = [] }) {
   const [showIosHelp, setShowIosHelp] = useState(false);
+  const [periode, setPeriode] = useState("mois");
+  // Lot 2c : courbe de trésorerie. Mois = 30 jours (pas d'un jour), Trimestre = 90 jours (pas d'une semaine),
+  // Année = 12 mois (pas de 30 jours). Le solde affiché à une date est le dernier solde connu à cette date.
+  const PERIODES = { mois: { jours: 30, pas: 1, libelle: "30 derniers jours" }, trimestre: { jours: 90, pas: 7, libelle: "3 derniers mois" }, annee: { jours: 360, pas: 30, libelle: "12 derniers mois" } };
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const isoLocal = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const aujourdhuiIso = isoLocal(new Date());
+  const serieTreso = (() => {
+    const cfg = PERIODES[periode] || PERIODES.mois;
+    const points = [];
+    for (let i = cfg.jours; i >= 0; i -= cfg.pas) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const iso = isoLocal(d);
+      let solde = 0;
+      for (const p of tresorerieJour) { if (p.jour <= iso) solde = p.solde; else break; }
+      points.push({ iso, label: cfg.pas >= 30 ? `${pad2(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}` : `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`, solde });
+    }
+    return points;
+  })();
+  const soldeMin = Math.min(0, ...serieTreso.map((p) => p.solde));
+  const soldeMax = Math.max(0, ...serieTreso.map((p) => p.solde));
+  const plage = soldeMax - soldeMin || 1;
+  const coords = serieTreso.map((p, i) => {
+    const x = serieTreso.length > 1 ? (i / (serieTreso.length - 1)) * 600 : 0;
+    const y = 180 - ((p.solde - soldeMin) / plage) * 160;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const ventes30 = (() => {
+    const out = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const iso = isoLocal(d);
+      const hit = ventesJour.find((v) => v.jour === iso);
+      out.push({ mois: `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`, produits: hit ? hit.produits : 0 });
+    }
+    return out;
+  })();
   const alreadyInstalled = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
   return (
-    <div className="p-4 md:p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl compta-accueil">
       <header className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <div className="display text-3xl" style={{ color: "#152238" }}>Centre de contrôle</div>
@@ -293,6 +330,35 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
         </div>
       )}
 
+      <div className="bg-white rounded-lg p-6 mb-8 min-w-0" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-tresorerie">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <div>
+            <div className="text-sm font-semibold" style={{ color: "#152238" }}>Évolution de la trésorerie</div>
+            <div className="text-xs" style={{ color: "#A39C87" }}>Banque + caisse, solde cumulé · {PERIODES[periode].libelle}</div>
+          </div>
+          <div className="inline-flex rounded-lg overflow-hidden" style={{ border: "1px solid #DDD6C4" }} data-testid="accueil-periode" role="group" aria-label="Période">
+            {[["mois", "Mois"], ["trimestre", "Trimestre"], ["annee", "Année"]].map(([k, lib]) => (
+              <button key={k} onClick={() => setPeriode(k)} aria-pressed={periode === k}
+                className="px-3 py-1.5 text-xs"
+                style={{ background: periode === k ? "#152238" : "#fff", color: periode === k ? "#EFE9DD" : "#152238" }}>{lib}</button>
+            ))}
+          </div>
+        </div>
+        {tresorerieJour.length === 0 ? (
+          <div className="text-sm py-16 text-center" style={{ color: "#A39C87" }}>Aucun mouvement de banque ou de caisse pour le moment.</div>
+        ) : (
+          <svg viewBox="0 0 600 200" preserveAspectRatio="none" className="w-full h-48" role="img" aria-label="Courbe du solde de trésorerie">
+            <line x1="0" x2="600" y1="180" y2="180" stroke="#E4DFD1" strokeWidth="1" />
+            <polyline points={coords.join(" ")} fill="none" stroke="#152238" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
+        <div className="flex justify-between text-xs mt-2" style={{ color: "#A39C87" }}>
+          <span>{serieTreso[0] ? serieTreso[0].label : ""}</span>
+          <span className="tabular" style={{ color: "#152238" }}>Solde actuel : {fmt(serieTreso.length ? serieTreso[serieTreso.length - 1].solde : 0)}</span>
+          <span>{serieTreso.length ? serieTreso[serieTreso.length - 1].label : ""}</span>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg p-6 mb-8" style={{ border: "1px solid #E4DFD1" }}>
         <div className="text-sm font-semibold mb-4" style={{ color: "#152238" }}>Produits vs Charges par mois</div>
         {chartData.length === 0 ? (
@@ -372,6 +438,31 @@ function Dashboard({ kpis, chartData, growthData, latestGrowth, entriesCount, in
           </div>
         );
       })()}
+
+      <div className="bg-white rounded-lg p-6 mb-8 min-w-0" style={{ border: "1px solid #E4DFD1" }} data-testid="accueil-ventes-jour">
+        <div className="text-sm font-semibold mb-1" style={{ color: "#152238" }}>Ventes par jour</div>
+        <p className="text-xs mb-4" style={{ color: "#A39C87" }}>Produits du journal, 30 derniers jours (aujourd'hui : {aujourdhuiIso.split("-").reverse().join("/")}).</p>
+        {ventesJour.length === 0 ? (
+          <div className="text-sm py-12 text-center" style={{ color: "#A39C87" }}>Aucune vente enregistrée.</div>
+        ) : (
+          <>
+          <svg viewBox="0 0 600 220" preserveAspectRatio="none" className="w-full h-56" role="img" aria-label="Ventes par jour">
+            <line x1="0" x2="600" y1="200" y2="200" stroke="#E4DFD1" strokeWidth="1" />
+            {(() => {
+              const max = Math.max(1, ...ventes30.map((v) => v.produits));
+              const step = 600 / ventes30.length;
+              return ventes30.map((v, i) => {
+                const h = (v.produits / max) * 180;
+                return <rect key={i} x={i * step + step * 0.2} y={200 - h} width={step * 0.6} height={h} fill="#0F6B5C"><title>{v.mois} : {fmt(v.produits)}</title></rect>;
+              });
+            })()}
+          </svg>
+          <div className="flex justify-between text-xs mt-1" style={{ color: "#A39C87" }}>
+            <span>{ventes30[0].mois}</span><span>{ventes30[15].mois}</span><span>{ventes30[29].mois}</span>
+          </div>
+          </>
+        )}
+      </div>
 
       <div className="bg-white rounded-lg p-6" style={{ border: "1px solid #E4DFD1" }}>
         <div className="text-sm font-semibold mb-1" style={{ color: "#152238" }}>Croissance du chiffre d'affaires par mois</div>
