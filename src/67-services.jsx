@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Services
-// @depends CURRENCIES, CURRENT_CURRENCY, EC_CSS, Plus, StatsBloc, ecBorder, ecBtn, ecBtnGold, ecDateFr
+// @depends CURRENCIES, CURRENT_CURRENCY, EC_CSS, Plus, StatsBloc, cpLoadChunk, ecBorder, ecBtn, ecBtnGold, ecDateFr
 //   ecInput, ecPastille, ecTelecharger, isFutureDate, isLocked, statMois, statSomme, todayStr, uid
 //   useBrouillon, useState
 // @exports ServicesModule
@@ -79,6 +79,36 @@ function svAjouterComptes(accounts, setAccounts, codes) {
   if (missing.length) setAccounts((prev) => [...prev, ...missing.filter((m) => !prev.some((a) => a.code === m.code))]);
 }
 
+const SV_XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const SV_DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+// Export Word ou Excel du rapport de la période (résumé, chiffre d'affaires par prestation, client, intervenant, dépenses, créances).
+async function svExporterRapport(kind, d) {
+  const OF = await cpLoadChunk("office");
+  const st = d.settings || {};
+  const periode = (d.du ? ecDateFr(d.du) : "début") + " au " + (d.au ? ecDateFr(d.au) : "aujourd'hui");
+  const ligne = (rub, lib, montant, gras) => [{ t: rub }, { t: lib }, { t: svM(montant), al: "r", g: !!gras }];
+  const lignes = [
+    ligne("Résumé", "Chiffre d'affaires (hors taxe)", d.ca),
+    ligne("Résumé", "Taxe facturée (à reverser)", d.tcaT),
+    ligne("Résumé", "Dépenses", d.depT),
+    ligne("Résumé", "Résultat (CA HT − dépenses)", d.ca - d.depT, true),
+    ...d.parPrest.map((x) => ligne("Chiffre d'affaires par prestation", x[0], x[1])),
+    ...d.parClient.map((x) => ligne("Chiffre d'affaires par client", x[0], x[1])),
+    ...d.parInterv.map((x) => ligne(d.titreInterv, x[0], x[1])),
+    ...d.parNatDep.map((x) => ligne("Dépenses par nature", x[0], x[1])),
+    ligne("Créances clients à ce jour", "Moins de 30 jours", d.ages.a),
+    ligne("Créances clients à ce jour", "31 à 60 jours", d.ages.b),
+    ligne("Créances clients à ce jour", "Plus de 60 jours", d.ages.c),
+  ];
+  const blocs = OF.officeEntreprise(st, "RAPPORT DES SERVICES ET PRESTATIONS").concat([
+    { k: "p", s: 9, sp: 80, parts: [{ t: "Période : " }, { t: periode, g: true }, { t: " · établi le " + ecDateFr(d.today) }] },
+    { k: "tbl", style: "ligne", cols: [{ h: "Rubrique", sp: 4, al: "l" }, { h: "Libellé", sp: 5, al: "l" }, { h: "Montant", sp: 3, al: "r" }], lignes, pieds: [] },
+  ]);
+  const doc = { fichier: "Rapport-services_" + (d.du || "debut") + "_" + (d.au || d.today), sections: [{ nom: "Rapport", blocs }] };
+  const logo = await OF.officeLogo(st.companyLogo, 50);
+  if (kind === "xlsx") OF.officeTelecharger(doc.fichier + ".xlsx", OF.officeXlsx(doc.sections, { logo }), SV_XLSX_TYPE);
+  else OF.officeTelecharger(doc.fichier + ".docx", OF.officeDocx(doc.sections, { logo }), SV_DOCX_TYPE);
+}
 function ServicesModule({ suppliers, services, setServices, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // caisse : clients, factures de prestations, encaissements
@@ -559,7 +589,7 @@ function ServicesModule({ suppliers, services, setServices, entries, setEntries,
       <div>
         <div className="flex flex-wrap gap-2 items-end mb-4"><div><label className="text-xs" style={{ color: "#8A8370" }}>Du</label><input type="date" value={rp.from} onChange={(e) => setRp({ ...rp, from: e.target.value })} data-testid="sv-rp-du" className={ecInput} style={ecBorder} /></div>
           <div><label className="text-xs" style={{ color: "#8A8370" }}>Au</label><input type="date" value={rp.to} onChange={(e) => setRp({ ...rp, to: e.target.value })} data-testid="sv-rp-au" className={ecInput} style={ecBorder} /></div>
-          <button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn}>Exporter (CSV)</button></div>
+          <button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn}>Exporter (CSV)</button><button onClick={() => svExporterRapport("xlsx", { ca, tcaT, depT, parPrest, parClient, parInterv, parNatDep, ages, titreInterv: "Chiffre d'affaires par " + V.interv.split(" ou ")[0].toLowerCase(), du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="sv-rap-excel">Excel</button><button onClick={() => svExporterRapport("docx", { ca, tcaT, depT, parPrest, parClient, parInterv, parNatDep, ages, titreInterv: "Chiffre d'affaires par " + V.interv.split(" ou ")[0].toLowerCase(), du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Word impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="sv-rap-word">Word</button></div>
         <div className="ec-card p-4 mb-4" data-testid="sv-rap-resume"><div className="display text-base mb-2" style={{ color: "#152238" }}>Résultat de la période</div>
           <div className="flex justify-between gap-2 py-1 text-sm"><span>Chiffre d'affaires (hors taxe)</span><span className="tabular" data-testid="sv-rap-ca">{svM(ca)}</span></div>
           {tcaT > 0 && <div className="flex justify-between gap-2 py-1 text-sm"><span>Taxe facturée (à reverser)</span><span className="tabular" data-testid="sv-rap-tca">{svM(tcaT)}</span></div>}
