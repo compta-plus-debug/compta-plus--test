@@ -108,6 +108,85 @@ function ieExpCalc(d) {
   return { totalUSD, ht, tca, totalHTG, costs, cogs, marge: ieR2(ht - cogs - costs), receivedUSD, resteUSD: ieR2(totalUSD - receivedUSD) };
 }
 
+// Dossier de travail en Excel (un classeur par dossier : synthèse, articles, frais, paiements / encaissements).
+// SheetJS est chargé à la demande depuis le site (vendor/xlsx.full.min.js), comme pour l'import de relevés.
+let _ieXlsxP = null;
+function ieLoadXlsx() {
+  if (typeof window !== "undefined" && window.XLSX) return Promise.resolve(window.XLSX);
+  if (_ieXlsxP) return _ieXlsxP;
+  _ieXlsxP = new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = "vendor/xlsx.full.min.js";
+    sc.onload = () => (window.XLSX ? res(window.XLSX) : rej(new Error("Lecteur Excel indisponible.")));
+    sc.onerror = () => { _ieXlsxP = null; rej(new Error("Excel non chargé (connexion internet ?). Réessayez.")); };
+    document.head.appendChild(sc);
+  });
+  return _ieXlsxP;
+}
+async function ieExporterDossier(kind, d) {
+  const SJ = await ieLoadXlsx();
+  const wb = SJ.utils.book_new();
+  const feuille = (lignes, largeurs) => { const ws = SJ.utils.aoa_to_sheet(lignes); ws["!cols"] = largeurs.map((w) => ({ wch: w })); return ws; };
+  const num = (v) => Number(v) || 0;
+  if (kind === "imp") {
+    const c = ieImpCalc(d);
+    const nomFrais = (k) => (IE_FRAIS.find((x) => x[0] === k) || [])[1] || k;
+    const etape = (IE_ETAPES_IMP.find((e) => e[0] === d.status) || [])[1] || d.status || "";
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Dossier d'importation", d.number || ""],
+      ["Fournisseur", d.supplier || ""],
+      ["Étape", etape],
+      ["Taux du dossier (HTG par USD)", num(d.rate)],
+      [],
+      ["Marchandises (USD)", c.goodsUSD], ["Fret et assurance (USD)", c.fiUSD], ["Total facture (USD)", c.totalUSD],
+      ["Marchandises (HTG)", c.goodsHTG], ["Total facture (HTG)", c.totalHTG],
+      ["Frais d'approche (HTG)", c.approche], ["Coût de revient (HTG)", c.coutRevient], ["Coefficient de coût", c.coef],
+      ["TCA récupérable (HTG)", c.chargesTca], ["Acompte d'impôt sur le revenu (HTG)", c.chargesAcompte],
+      ["Payé (USD)", c.paidUSD], ["Reste dû (USD)", c.resteUSD],
+    ], [44, 22]), "Synthèse");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Désignation", "Quantité", "Prix unitaire USD", "Montant HTG", "Coût total HTG", "Coût unitaire HTG"],
+      ...c.lineCosts.map((l) => [l.desc || "", num(l.qty), num(l.unitUSD), l.lineHTG, l.total, l.unitCost]),
+    ], [36, 12, 18, 16, 18, 18]), "Articles");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Nature", "Montant HTG", "Statut", "Date", "Libellé"],
+      ...(d.charges || []).map((f) => [nomFrais(f.kind), num(f.amount), f.status || "", f.date || "", f.label || ""]),
+    ], [44, 16, 14, 14, 30]), "Frais");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Date", "Montant USD", "Écart de change HTG", "Statut"],
+      ...(d.payments || []).map((p) => [p.date || "", num(p.usd), num(p.ecart), p.status || ""]),
+    ], [14, 16, 22, 14]), "Paiements");
+    await SJ.writeFile(wb, "Dossier-import-" + (d.number || d.id) + ".xlsx");
+  } else {
+    const c = ieExpCalc(d);
+    const etape = (IE_ETAPES_EXP.find((e) => e[0] === d.status) || [])[1] || d.status || "";
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Dossier d'exportation", d.number || ""],
+      ["Client", d.customer || ""],
+      ["Étape", etape],
+      ["Taux du dossier (HTG par USD)", num(d.rate)],
+      ["Taux de TCA (%)", num(d.tcaRate)],
+      [],
+      ["Total facture (USD)", c.totalUSD], ["Chiffre d'affaires HT (HTG)", c.ht], ["TCA (HTG)", c.tca], ["Total TTC (HTG)", c.totalHTG],
+      ["Coût des marchandises (HTG)", c.cogs], ["Frais (HTG)", c.costs], ["Marge (HTG)", c.marge],
+      ["Encaissé (USD)", c.receivedUSD], ["Reste à recevoir (USD)", c.resteUSD],
+    ], [44, 22]), "Synthèse");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Désignation", "Quantité", "Prix unitaire USD", "Coût unitaire HTG"],
+      ...(d.lines || []).map((l) => [l.desc || "", num(l.qty), num(l.unitUSD), num(l.unitCostHTG)]),
+    ], [36, 12, 18, 18]), "Articles");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Nature", "Montant HTG", "Statut", "Date", "Libellé"],
+      ...(d.costs || []).map((f) => [f.label || f.kind || "", num(f.amount), f.status || "", f.date || "", f.label || ""]),
+    ], [44, 16, 14, 14, 30]), "Frais");
+    SJ.utils.book_append_sheet(wb, feuille([
+      ["Date", "Montant USD", "Écart de change HTG", "Statut"],
+      ...(d.receipts || []).map((r) => [r.date || "", num(r.usd), num(r.ecart), r.status || ""]),
+    ], [14, 16, 22, 14]), "Encaissements");
+    await SJ.writeFile(wb, "Dossier-export-" + (d.number || d.id) + ".xlsx");
+  }
+}
+
 function ImportExportModule({ impex, setImpex, entries, setEntries, accounts, setAccounts, products, setProducts, movements, setMovements, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const today = todayStr();
@@ -388,6 +467,7 @@ function ImportExportModule({ impex, setImpex, entries, setEntries, accounts, se
           {canEdit && figee && !d.receivedToStock && <button onClick={() => recevoirEnStock(d)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ie-imp-stock">Recevoir en stock au coût de revient</button>}
           {d.receivedToStock && <span className="text-xs" style={{ color: "#0F6B5C" }} data-testid="ie-imp-recu-stock">✓ Reçu en stock le {ecDateFr(d.receivedAt)}</span>}
           <button onClick={() => setImprimer({ kind: "imp", id: d.id })} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ie-imp-imprimer">Imprimer la fiche de coût de revient</button>
+          <button onClick={() => ieExporterDossier("imp", d).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ie-imp-excel">Exporter le dossier (Excel)</button>
           {canEdit && !figee && <button onClick={() => supprimerImp(d)} className="text-xs underline" style={{ color: "#A6432F" }}>Supprimer ce dossier</button>}
         </div>
       </div>
@@ -616,6 +696,7 @@ function ImportExportModule({ impex, setImpex, entries, setEntries, accounts, se
           {canEdit && figee && !d.stockOut && <button onClick={() => sortirDuStock(d)} className="px-3 py-2 rounded text-sm" style={ecBtnGold} data-testid="ie-exp-stock">Sortir les marchandises du stock</button>}
           {d.stockOut && <span className="text-xs" style={{ color: "#0F6B5C" }} data-testid="ie-exp-sorti">✓ Sorties du stock le {ecDateFr(d.stockOutAt)}</span>}
           <button onClick={() => setImprimer({ kind: "exp", id: d.id })} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ie-exp-imprimer">Imprimer la facture d'exportation</button>
+          <button onClick={() => ieExporterDossier("exp", d).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="ie-exp-excel">Exporter le dossier (Excel)</button>
           {canEdit && !figee && <button onClick={() => supprimerExp(d)} className="text-xs underline" style={{ color: "#A6432F" }}>Supprimer ce dossier</button>}
         </div>
       </div>

@@ -117,6 +117,57 @@ function BtJournalForm({ entry, staff, effectif, canEdit, onSave }) {
   );
 }
 
+// Dossier de chantier en Excel : synthèse, bordereau de prix, situations de travaux, dépenses.
+// SheetJS est chargé à la demande depuis le site (vendor/xlsx.full.min.js).
+let _btXlsxP = null;
+function btLoadXlsx() {
+  if (typeof window !== "undefined" && window.XLSX) return Promise.resolve(window.XLSX);
+  if (_btXlsxP) return _btXlsxP;
+  _btXlsxP = new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = "vendor/xlsx.full.min.js";
+    sc.onload = () => (window.XLSX ? res(window.XLSX) : rej(new Error("Lecteur Excel indisponible.")));
+    sc.onerror = () => { _btXlsxP = null; rej(new Error("Excel non chargé (connexion internet ?). Réessayez.")); };
+    document.head.appendChild(sc);
+  });
+  return _btXlsxP;
+}
+async function btExporterChantier(p) {
+  const SJ = await btLoadXlsx();
+  const wb = SJ.utils.book_new();
+  const feuille = (lignes, largeurs) => { const ws = SJ.utils.aoa_to_sheet(lignes); ws["!cols"] = largeurs.map((w) => ({ wch: w })); return ws; };
+  const num = (v) => Number(v) || 0;
+  const nature = (k) => (BT_DEPENSES.find((x) => x[0] === k) || [])[1] || k;
+  const s = p.site;
+  const depTotal = btR2(p.depenses.reduce((t, x) => t + num(x.amount), 0));
+  SJ.utils.book_append_sheet(wb, feuille([
+    ["Chantier", s.name || ""],
+    ["Maître d'ouvrage (client)", p.client ? p.client.name || "" : ""],
+    [],
+    ["Marché HT (HTG)", p.marche],
+    ["Facturé HT (HTG)", p.facture],
+    ["Encaissé (HTG)", p.encaisse],
+    ["Dépenses (HTG)", depTotal],
+    ["Marge (HTG)", btR2(p.facture - depTotal)],
+    ["Reste à facturer (HTG)", btR2(p.marche - p.facture)],
+    ["Retenue de garantie à libérer (HTG)", p.retenue],
+  ], [40, 24]), "Synthèse");
+  SJ.utils.book_append_sheet(wb, feuille([
+    ["Désignation", "Unité", "Quantité", "Prix unitaire HT", "Montant HT"],
+    ...(s.lines || []).map((l) => [l.label || "", l.unit || "", num(l.qty), num(l.pu), btR2(num(l.qty) * num(l.pu))]),
+    ["Total du marché (HT)", "", "", "", p.marche],
+  ], [40, 10, 12, 18, 18]), "Bordereau");
+  SJ.utils.book_append_sheet(wb, feuille([
+    ["N°", "Date", "Cumul HT", "Montant HT", "Retenue de garantie", "Net à payer", "Encaissé", "Reste à payer"],
+    ...p.situations.map((x, i) => [x.n || i + 1, x.date || "", num(x.cumHt), num(x.ht), num(x.retenue), num(x.net), btSolde(x).paye, btSolde(x).reste]),
+  ], [8, 14, 16, 16, 20, 16, 16, 16]), "Situations");
+  SJ.utils.book_append_sheet(wb, feuille([
+    ["Date", "Nature", "Fournisseur", "Montant", "Mode de règlement", "Reste dû"],
+    ...p.depenses.map((x) => [x.date || "", nature(x.kind), x.supplier || "", num(x.amount), x.mode || "", btResteDep(x)]),
+  ], [14, 34, 24, 16, 18, 16]), "Dépenses");
+  await SJ.writeFile(wb, "Chantier-" + String(s.name || s.id || "").replace(/[^\w-]+/g, "_") + ".xlsx");
+}
+
 function BtpModule({ suppliers, btp, setBtp, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail, employees, setEmployees, payslips }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // secrétariat : clients, situations et encaissements
@@ -1071,6 +1122,7 @@ function BtpModule({ suppliers, btp, setBtp, entries, setEntries, accounts, setA
           <div className="ec-wrap"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Désignation</th><th>Unité</th><th className="text-right">Quantité</th><th className="text-right">Prix unitaire</th><th className="text-right">Montant</th><th></th></tr></thead>
             <tbody>{(s.lines || []).map((l) => (<tr key={l.id} data-testid="bt-ligne"><td className="py-1.5">{canEdit ? <BtChamp value={l.label} onCommit={(v) => majLigne(s, l, { label: String(v).trim() })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-label" className="border rounded px-1 py-0.5 text-sm" style={{ ...ecBorder, width: "100%", minWidth: 120 }} /> : l.label}</td><td>{canEdit ? <BtChamp value={l.unit || ""} onCommit={(v) => majLigne(s, l, { unit: String(v).trim() })} onSaved={() => showToast("Enregistré ✓")} className="border rounded px-1 py-0.5 text-xs" style={{ ...ecBorder, width: 70 }} /> : (l.unit || "—")}</td><td className="text-right tabular">{canEdit && sitsDe(s.id).length === 0 ? <BtChamp type="number" min="0" step="0.01" value={l.qty} onCommit={(v) => majLigne(s, l, { qty: btQ(v) })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-qte" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 80 }} /> : l.qty}</td><td className="text-right tabular">{canEdit && sitsDe(s.id).length === 0 ? <BtChamp type="number" min="0" value={l.pu} onCommit={(v) => majLigne(s, l, { pu: btR2(v) })} onSaved={() => showToast("Enregistré ✓")} data-testid="bt-ligne-pu" className="border rounded px-1 py-0.5 text-xs tabular" style={{ ...ecBorder, width: 100 }} /> : fmt(l.pu)}</td><td className="text-right tabular">{fmt(btR2(l.qty * l.pu))}</td><td className="text-right">{canEdit && sitsDe(s.id).length === 0 && <button onClick={() => retirerLigne(s, l)} className="text-xs" style={{ color: "#A6432F" }} data-testid="bt-ligne-retirer">Retirer</button>}</td></tr>))}</tbody>
             {(s.lines || []).length > 0 && <tfoot><tr style={{ fontWeight: 600, borderTop: "2px solid #152238" }}><td colSpan={4}>Total du marché (hors taxe)</td><td className="text-right tabular" data-testid="bt-marche">{fmt(btMarche(s))}</td><td></td></tr></tfoot>}</table></div>
+          {(s.lines || []).length > 0 && (<div className="mb-2"><button onClick={() => btExporterChantier({ site: s, client: clients.find((c) => c.id === (s.clientId || (sitsDe(s.id)[0] || {}).clientId)), marche: btMarche(s), facture: factureHt(s.id), encaisse: btR2(sitsDe(s.id).reduce((t, x) => t + btSolde(x).paye, 0)), retenue: retenueDue(s.id), situations: sitsDe(s.id), depenses: deps.filter((d) => d.siteId === s.id && d.status !== "annulé") }).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="bt-chantier-excel">Exporter le chantier (Excel)</button></div>)}
           {(s.lines || []).length === 0 && <div className="text-sm mb-2" style={{ color: "#8A8370" }}>Aucune ligne : ajoutez les travaux du marché ci-dessous.</div>}
           {canEdit && (<div className="grid md:grid-cols-5 gap-2 mt-2 items-end">
             <div className="md:col-span-2"><label className="text-xs" style={{ color: "#8A8370" }}>Désignation des travaux</label><div className="flex gap-1"><input value={fl.label} onChange={(e) => setFl({ ...fl, label: e.target.value })} data-testid="bt-lg-label" className={ecInput} style={ecBorder} /><BtFleche id="bt-dl-ligne" onPick={(v) => setFl({ ...fl, label: v })} /></div></div>
