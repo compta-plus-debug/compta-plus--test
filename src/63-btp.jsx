@@ -158,7 +158,7 @@ function btDocumentChantier(p, OF) {
     sections.push({ nom: "Dépenses", blocs: OF.officeEntreprise(st, null).concat([
       { k: "p", t: "Dépenses du chantier — " + (s.name || ""), g: true, s: 13, sp: 120 },
       { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 2, al: "l" }, { h: "Nature", sp: 3, al: "l" }, { h: "Fournisseur", sp: 2, al: "l" }, { h: "Montant", sp: 2, al: "r" }, { h: "Mode de règlement", sp: 2, al: "l" }, { h: "Reste dû", sp: 1, al: "r" }],
-        lignes: p.depenses.map((x) => [ecDateFr(x.date), nature(x.kind), x.supplier || "", btM(x.amount), x.mode || "", btM(btResteDep(x))]),
+        lignes: p.depenses.map((x) => [ecDateFr(x.date), nature(x.kind), x.supplier || "", btM(x.amount), ({ caisse: "Caisse", banque: "Banque", apayer: "À payer (dette)" })[x.mode] || x.mode || "", btM(btResteDep(x))]),
         pieds: [[{ t: "Total", cs: 3, g: true }, { ...btM(totalDep), g: true }, { t: "" }, { ...btM(totalReste), g: true }]] },
     ]) });
   }
