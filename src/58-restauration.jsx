@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Restauration
-// @depends EC_CSS, Menu, Plus, StatsBloc, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille
+// @depends EC_CSS, Menu, Plus, StatsBloc, cpLoadChunk, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille
 //   ecTelecharger, isFutureDate, isLocked, statMois, statSomme, todayStr, uid, useState
 // @exports RestoModule
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -59,6 +59,26 @@ function rsRedimensionner(file, max) {
   });
 }
 
+// ── Export Word et Excel du journal des ventes (période choisie) ──
+const RS_XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const RS_DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+async function rsExporterJournal(kind, d) {
+  const OF = await cpLoadChunk("office");
+  const st = d.settings || {};
+  const tot = (f) => rsR2(d.jours.reduce((s, j) => s + f(d.parJour[j]), 0));
+  const cellules = (x) => [ecDateFr(x.j), { t: String(x.nb), al: "r" }, { t: rsM(x.sous), al: "r" }, { t: rsM(x.service), al: "r" }, { t: rsM(x.tca), al: "r" }, { t: rsM(x.tip), al: "r" }, { t: rsM(x.tot), al: "r", g: true }, { t: rsM(x.esp), al: "r" }, { t: rsM(x.ban), al: "r" }];
+  const lignes = d.jours.map((j) => cellules({ ...d.parJour[j], j }));
+  const pied = [{ t: "TOTAL", g: true }, { t: String(d.jours.reduce((s, j) => s + d.parJour[j].nb, 0)), al: "r", g: true }, { t: rsM(tot((x) => x.sous)), al: "r", g: true }, { t: rsM(tot((x) => x.service)), al: "r", g: true }, { t: rsM(tot((x) => x.tca)), al: "r", g: true }, { t: rsM(tot((x) => x.tip)), al: "r", g: true }, { t: rsM(tot((x) => x.tot)), al: "r", g: true }, { t: rsM(tot((x) => x.esp)), al: "r", g: true }, { t: rsM(tot((x) => x.ban)), al: "r", g: true }];
+  const blocs = OF.officeEntreprise(st, "JOURNAL DES VENTES — RESTAURATION").concat([
+    { k: "p", s: 9, sp: 80, parts: [{ t: "Période : " }, { t: ecDateFr(d.du) + " au " + ecDateFr(d.au), g: true }, { t: " · établi le " + ecDateFr(d.today) }] },
+    { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 2, al: "l" }, { h: "Additions", sp: 1, al: "r" }, { h: "Sous-total", sp: 1, al: "r" }, { h: "Service", sp: 1, al: "r" }, { h: "TCA", sp: 1, al: "r" }, { h: "Pourboires", sp: 1, al: "r" }, { h: "Total encaissé", sp: 2, al: "r" }, { h: "Espèces", sp: 1, al: "r" }, { h: "Banque", sp: 2, al: "r" }],
+      lignes, pieds: [pied] },
+  ]);
+  const doc = { fichier: "Journal-restauration-" + d.du + "_" + d.au, sections: [{ nom: "Journal", blocs }] };
+  const logo = await OF.officeLogo(st.companyLogo, 50);
+  if (kind === "xlsx") OF.officeTelecharger(doc.fichier + ".xlsx", OF.officeXlsx(doc.sections, { logo }), RS_XLSX_TYPE);
+  else OF.officeTelecharger(doc.fichier + ".docx", OF.officeDocx(doc.sections, { logo }), RS_DOCX_TYPE);
+}
 function RestoModule({ resto, setResto, entries, setEntries, accounts, setAccounts, products, setProducts, movements, setMovements, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // serveur ou caissier : ouvre les commandes et encaisse
@@ -735,7 +755,7 @@ function RestoModule({ resto, setResto, entries, setEntries, accounts, setAccoun
         <div className="ec-card p-4 mb-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
           <div>{lab("Du")}<input type="date" value={rp.from} onChange={(e) => setRp({ ...rp, from: e.target.value })} data-testid="resto-rp-du" className={ecInput} style={ecBorder} /></div>
           <div>{lab("Au")}<input type="date" value={rp.to} onChange={(e) => setRp({ ...rp, to: e.target.value })} data-testid="resto-rp-au" className={ecInput} style={ecBorder} /></div>
-          <div><button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="resto-rapport-export">Exporter le journal (CSV)</button></div>
+          <div><button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="resto-rapport-export">Exporter le journal (CSV)</button><button onClick={() => rsExporterJournal("xlsx", { jours, parJour, du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="resto-journal-excel">Excel</button><button onClick={() => rsExporterJournal("docx", { jours, parJour, du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Word impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="resto-journal-word">Word</button></div>
         </div></div>
         <div className="display text-base" style={{ color: "#152238" }}>Journal des ventes par jour</div>
         <div className="ec-wrap mb-5"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th className="text-right">Additions</th><th className="text-right">Sous-total</th><th className="text-right">Service</th><th className="text-right">TCA</th><th className="text-right">Pourboires</th><th className="text-right">Total encaissé</th><th className="text-right">Espèces</th><th className="text-right">Banque</th></tr></thead>
