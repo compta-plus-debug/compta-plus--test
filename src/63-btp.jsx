@@ -2,7 +2,7 @@
 // @module Btp
 // @depends EC_CSS, Plus, StatsBloc, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille
 //   ecTelecharger, fmt, isFutureDate, isLocked, statMois, statSomme, todayStr, uid, useBrouillon
-//   useEffect, useState, officeDocx, officeEntreprise, officeLogo, officeTelecharger, officeXlsx
+//   useEffect, useState, cpLoadChunk
 // @exports BtpModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // Bloc BTP et construction : clients (maîtres d'ouvrage), chantiers avec bordereau de prix (devis imprimable), avances de démarrage,
@@ -123,7 +123,7 @@ const btM = (v) => ({ t: fmt(v), n: btR2(v), nf: "g" });
 const XLSX_TYPE_BT = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DOCX_TYPE_BT = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-function btDocumentChantier(p) {
+function btDocumentChantier(p, OF) {
   const s = p.site;
   const st = p.settings || {};
   const tcaRate = Number(p.tcaRate) || 0;
@@ -131,7 +131,7 @@ function btDocumentChantier(p) {
   const clientNom = p.client ? p.client.name || "—" : "—";
   const marche = btMarche(s);
   const sections = [];
-  const devis = officeEntreprise(st, "DEVIS ESTIMATIF — BORDEREAU DE PRIX").concat([
+  const devis = OF.officeEntreprise(st, "DEVIS ESTIMATIF — BORDEREAU DE PRIX").concat([
     { k: "p", s: 9, sp: 80, parts: [{ t: "Chantier : " }, { t: s.name || "", g: true }, { t: " (" + (s.number || "") + ")" + (s.address ? " — " + s.address : "") }] },
     { k: "p", s: 9, sp: 160, parts: [{ t: "Client : " }, { t: clientNom, g: true }, { t: " · établi le " + ecDateFr(p.today) }] },
     { k: "tbl", style: "grille",
@@ -146,7 +146,7 @@ function btDocumentChantier(p) {
   devis.push({ k: "tbl", style: "sans", cols: [{ sp: 5 }, { sp: 2 }, { sp: 5 }],
     lignes: [[{ t: "Pour l'entreprise", bord: "haut", al: "c" }, { t: "", bord: "aucun" }, { t: "Bon pour accord du client (date et signature)", bord: "haut", al: "c" }]], pieds: [] });
   sections.push({ nom: "Devis", blocs: devis });
-  if ((p.situations || []).length) sections.push({ nom: "Situations", blocs: officeEntreprise(st, null).concat([
+  if ((p.situations || []).length) sections.push({ nom: "Situations", blocs: OF.officeEntreprise(st, null).concat([
     { k: "p", t: "Situations de travaux — " + (s.name || ""), g: true, s: 13, sp: 120 },
     { k: "tbl", style: "ligne", cols: [{ h: "N°", sp: 1, al: "c" }, { h: "Date", sp: 1, al: "l" }, { h: "Cumul HT", sp: 2, al: "r" }, { h: "Montant HT", sp: 2, al: "r" }, { h: "Retenue", sp: 2, al: "r" }, { h: "Net à payer", sp: 2, al: "r" }, { h: "Encaissé", sp: 1, al: "r" }, { h: "Reste à payer", sp: 1, al: "r" }],
       lignes: p.situations.map((x, i) => [{ t: String(x.n || i + 1), al: "c" }, ecDateFr(x.date), btM(x.cumHt), btM(x.ht), btM(x.retenue), btM(x.net), btM(btSolde(x).paye), btM(btSolde(x).reste)]),
@@ -155,7 +155,7 @@ function btDocumentChantier(p) {
   if ((p.depenses || []).length) {
     const totalDep = btR2(p.depenses.reduce((t, x) => t + (Number(x.amount) || 0), 0));
     const totalReste = btR2(p.depenses.reduce((t, x) => t + btResteDep(x), 0));
-    sections.push({ nom: "Dépenses", blocs: officeEntreprise(st, null).concat([
+    sections.push({ nom: "Dépenses", blocs: OF.officeEntreprise(st, null).concat([
       { k: "p", t: "Dépenses du chantier — " + (s.name || ""), g: true, s: 13, sp: 120 },
       { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 2, al: "l" }, { h: "Nature", sp: 3, al: "l" }, { h: "Fournisseur", sp: 2, al: "l" }, { h: "Montant", sp: 2, al: "r" }, { h: "Mode de règlement", sp: 2, al: "l" }, { h: "Reste dû", sp: 1, al: "r" }],
         lignes: p.depenses.map((x) => [ecDateFr(x.date), nature(x.kind), x.supplier || "", btM(x.amount), x.mode || "", btM(btResteDep(x))]),
@@ -167,16 +167,18 @@ function btDocumentChantier(p) {
 
 // Excel : un classeur mis en forme (devis, situations, dépenses), logo de l'entreprise en tête.
 async function btExporterChantier(p) {
-  const doc = btDocumentChantier(p);
-  const logo = await officeLogo(p.settings && p.settings.companyLogo, 50);
-  officeTelecharger(doc.fichier + ".xlsx", officeXlsx(doc.sections, { logo }), XLSX_TYPE_BT);
+  const OF = await cpLoadChunk("office");
+  const doc = btDocumentChantier(p, OF);
+  const logo = await OF.officeLogo(p.settings && p.settings.companyLogo, 50);
+  OF.officeTelecharger(doc.fichier + ".xlsx", OF.officeXlsx(doc.sections, { logo }), XLSX_TYPE_BT);
 }
 
 // Word : un document mis en forme (une page par section), logo de l'entreprise en tête.
 async function btExporterChantierWord(p) {
-  const doc = btDocumentChantier(p);
-  const logo = await officeLogo(p.settings && p.settings.companyLogo, 50);
-  officeTelecharger(doc.fichier + ".docx", officeDocx(doc.sections, { logo }), DOCX_TYPE_BT);
+  const OF = await cpLoadChunk("office");
+  const doc = btDocumentChantier(p, OF);
+  const logo = await OF.officeLogo(p.settings && p.settings.companyLogo, 50);
+  OF.officeTelecharger(doc.fichier + ".docx", OF.officeDocx(doc.sections, { logo }), DOCX_TYPE_BT);
 }
 
 function BtpModule({ suppliers, btp, setBtp, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail, employees, setEmployees, payslips }) {
@@ -1532,7 +1534,7 @@ function BtpModule({ suppliers, btp, setBtp, entries, setEntries, accounts, setA
           <div className="display text-base mb-2" style={{ color: "#152238" }}>Pour démarrer, en 7 étapes</div>
           <ol className="text-sm" style={{ color: "#152238", listStyle: "none", paddingLeft: 0 }}>{etapes.map(([t, d, tb, fait], i) => (<li key={i} data-testid="bt-etape" className="mb-1.5 flex flex-wrap gap-2 items-baseline"><span style={{ color: fait ? "#0F6B5C" : "#8A8370", fontWeight: 700 }}>{fait ? "✓" : (i + 1) + "."}</span><span><b>{t}</b> — <span style={{ color: "#5B563F" }}>{d}</span></span>{!fait && !(isVendeur && (tb === "chantiers" || tb === "depenses")) && <button className="text-xs underline" data-testid="bt-etape-ouvrir" onClick={() => setTab(tb)}>Ouvrir</button>}</li>))}</ol>
         </div>)}
-        {sites.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="bt-vide">Pour commencer : enregistrez vos <b>clients</b>, créez un <b>chantier</b> avec son bordereau de prix, puis suivez les <b>dépenses</b> et émettez les <b>situations de travaux</b>.</div>}
+        {sites.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#fff", border: "1px solid #E4DFD1", color: "#152238" }} data-testid="bt-vide">Pour commencer : enregistrez vos <b>clients</b>, créez un <b>chantier</b> avec son bordereau de prix, puis suivez les <b>dépenses</b> et émettez les <b>situations de travaux</b>.</div>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           {kpis.map(([l, v, t]) => (<div key={t} className="ec-kpi"><div className="text-xs" style={{ color: "#8A8370" }}>{l}</div><div className="display text-lg tabular" data-testid={t} style={{ color: "#152238" }}>{v}</div></div>))}
         </div>

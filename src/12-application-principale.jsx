@@ -30,71 +30,7 @@
   document.addEventListener("drop", (e) => { const dt = e.dataTransfer; if (dt && dt.files && dt.files.length) return; e.preventDefault(); }, true);
 })();
 // Modules de secteur (blocs d'activité), apparence maquette B. CSS intégré, limité à <main class="compta-bloc">.
-const BLOCS_CSS = String.raw`/* ==========================================================================
-   Compta+ — Refonte visuelle : BLOCS D'ACTIVITÉ (maquette B)
-   Apparence seule. Règles limitées à <main class="compta-bloc"> (modules de
-   secteur uniquement : restauration, BTP, industrie, services, ONG, agriculture,
-   immobilier, transport, hôtellerie, santé, import-export, écoles).
-   Retour arrière : supprimer la ligne <link ... refonte-blocs.css>.
-   ========================================================================== */
-
-/* Tableaux : en-tête navy plein, texte clair, lignes aérées et texte qui passe à la ligne */
-main.compta-bloc table { width: 100%; border-collapse: collapse; font-size: 13px; }
-main.compta-bloc table thead tr { background: #152238; }
-main.compta-bloc table thead th {
-  background: #152238 !important;
-  color: #EFE9DD !important;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  padding: 10px 12px;
-}
-main.compta-bloc table tbody td {
-  padding: 9px 12px;
-  line-height: 1.45;
-  vertical-align: middle;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-main.compta-bloc table tbody tr { border-top: 1px solid #EEE9DA; }
-main.compta-bloc table tbody tr:nth-child(even) { background: #FAF8F1; }
-main.compta-bloc table tbody tr:hover { background: #F3EFE0; }
-main.compta-bloc .overflow-x-auto { -webkit-overflow-scrolling: touch; max-width: 100%; }
-
-/* Indicateurs : filet coloré, valeurs qui tiennent sur téléphone */
-main.compta-bloc .grid.md\:grid-cols-4 > div,
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div {
-  border-radius: 14px;
-  padding: 16px 18px;
-  border-top: 4px solid #7F94B6;
-  box-shadow: 0 1px 3px rgba(21, 34, 56, .07);
-  min-width: 0;
-}
-main.compta-bloc .grid.md\:grid-cols-4 > div:nth-child(1),
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(1) { border-top-color: #152238; }
-main.compta-bloc .grid.md\:grid-cols-4 > div:nth-child(2),
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(2) { border-top-color: #C9A24B; }
-main.compta-bloc .grid.md\:grid-cols-4 > div:nth-child(3),
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(3) { border-top-color: #3F5A85; }
-main.compta-bloc .grid.md\:grid-cols-4 > div:nth-child(4),
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div:nth-child(4) { border-top-color: #A6432F; }
-main.compta-bloc .grid.md\:grid-cols-4 > div > div:last-child,
-main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4 > div > div:last-child {
-  font-size: clamp(16px, 4.4vw, 22px);
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-/* Cartes blanches du module */
-main.compta-bloc .bg-white.rounded-lg {
-  border: 1px solid #E4DFD1;
-  border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(21, 34, 56, .07);
-}
-main.compta-bloc .display.text-base { border-left: 3px solid #C9A24B; padding-left: 10px; }
-`;
+const BLOCS_CSS = String.raw`main.compta-bloc table{width: 100%;border-collapse: collapse;font-size: 13px;}main.compta-bloc table thead tr{background: #152238;}main.compta-bloc table thead th{background: #152238 !important;color: #EFE9DD !important;font-size: 11px;font-weight: 600;letter-spacing: .04em;text-transform: uppercase;white-space: nowrap;padding: 10px 12px;}main.compta-bloc table tbody td{padding: 9px 12px;line-height: 1.45;vertical-align: middle;white-space: normal;overflow-wrap: anywhere;}main.compta-bloc table tbody tr{border-top: 1px solid #EEE9DA;}main.compta-bloc table tbody tr:nth-child(even){background: #FAF8F1;}main.compta-bloc table tbody tr:hover{background: #F3EFE0;}main.compta-bloc .overflow-x-auto{-webkit-overflow-scrolling: touch;max-width: 100%;}main.compta-bloc .grid.md\:grid-cols-4>div,main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div{border-radius: 14px;padding: 16px 18px;border-top: 4px solid #7F94B6;box-shadow: 0 1px 3px rgba(21,34,56,.07);min-width: 0;}main.compta-bloc .grid.md\:grid-cols-4>div:nth-child(1),main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div:nth-child(1){border-top-color: #152238;}main.compta-bloc .grid.md\:grid-cols-4>div:nth-child(2),main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div:nth-child(2){border-top-color: #C9A24B;}main.compta-bloc .grid.md\:grid-cols-4>div:nth-child(3),main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div:nth-child(3){border-top-color: #3F5A85;}main.compta-bloc .grid.md\:grid-cols-4>div:nth-child(4),main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div:nth-child(4){border-top-color: #A6432F;}main.compta-bloc .grid.md\:grid-cols-4>div>div:last-child,main.compta-bloc .grid.grid-cols-2.md\:grid-cols-4>div>div:last-child{font-size: clamp(16px,4.4vw,22px);line-height: 1.25;overflow-wrap: anywhere;}main.compta-bloc .bg-white.rounded-lg{border: 1px solid #E4DFD1;border-radius: 14px;box-shadow: 0 1px 3px rgba(21,34,56,.07);}main.compta-bloc .display.text-base{border-left: 3px solid #C9A24B;padding-left: 10px;}`;
 
 function App() {
   const [active, setActive] = useState("dashboard");
@@ -2660,7 +2596,7 @@ function App() {
           général et la déconnexion. Bloc Entreprise : barre mobile + tiroir
           habituels, inchangés. */}
       {(active === "superadmin" || active === "centredegestion" || active === "groupdashboard") ? (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 no-print" style={{ background: "#152238" }}>
+        <div className={"flex items-center justify-between gap-3 px-4 py-3 no-print" + (active === "groupdashboard" ? " md:hidden" : "")} style={{ background: "#152238" }}>
           <div className="flex items-center gap-3">
             <svg width="30" height="30" viewBox="0 0 512 512" style={{ flexShrink: 0, borderRadius: 7 }}>
               <rect width="512" height="512" rx="112" fill="#14458F" />
@@ -2943,6 +2879,8 @@ function App() {
             onRequestsChanged={loadPendingGroupRequests}
             onEnterCurrentCompany={() => setActive("dashboard")}
             onJumpToModule={(m) => setActive(m)}
+            onBackToPlatform={() => setPlatformLanding(true)}
+            onSignOut={() => { clearMembershipCache(); supabase.auth.signOut(); }}
           />
         )}
         <div

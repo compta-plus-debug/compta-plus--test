@@ -42,7 +42,7 @@ main .compta-groupe table tbody td { padding: 9px 12px; line-height: 1.4; vertic
 main .compta-groupe table tbody tr:nth-child(even) { background: #FAF8F1; }
 `;
 
-function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlanStatus, groupTrialEndsAt, companyId, role, showToast, onGroupRenamed, onRequestsChanged, onEnterCurrentCompany, onJumpToModule }) {
+function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlanStatus, groupTrialEndsAt, companyId, role, showToast, onGroupRenamed, onRequestsChanged, onEnterCurrentCompany, onJumpToModule, onBackToPlatform, onSignOut }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [companiesData, setCompaniesData] = useState([]);
@@ -286,10 +286,20 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
           <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#C9A24B" }}>Espace multi-entreprises</div>
           <div className="display text-2xl" style={{ color: "#fff" }}>{groupName}</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs px-3 py-1.5 rounded-full" style={{ background: "rgba(201,162,75,0.18)", color: "#C9A24B" }}>
             {companiesData.length} / {groupMaxCompanies || 5} entreprises
           </span>
+          {onBackToPlatform && (
+            <button onClick={onBackToPlatform} className="hidden md:inline-flex text-xs px-3 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.12)", color: "#C9A24B" }}>
+              ← Tableau de bord général
+            </button>
+          )}
+          {onSignOut && (
+            <button onClick={onSignOut} className="hidden md:inline-flex text-xs px-3 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.12)", color: "#EFE9DD" }}>
+              Se déconnecter
+            </button>
+          )}
           {role === "Administrateur" && (
             <button onClick={() => { setShowSettings((v) => !v); setEditGroupName(groupName || ""); }}
               className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5" style={{ background: "rgba(255,255,255,0.12)", color: "#EFE9DD" }}>

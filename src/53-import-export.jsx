@@ -1,7 +1,7 @@
 // ═══ MODULE ═══
 // @module Import export
 // @depends EC_CSS, StatsBloc, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille, ecTelecharger
-//   fmt, isFutureDate, isLocked, statMois, statSomme, todayStr, uid, useBrouillon, useState, officeDocx, officeEntetePage, officeEntreprise, officeLogo, officeTelecharger, officeXlsx
+//   fmt, isFutureDate, isLocked, statMois, statSomme, todayStr, uid, useBrouillon, useState, cpLoadChunk
 // @exports ImportExportModule
 // ═══ FIN DE L'EN-TÊTE ═══
 // Bloc Import-export : dossiers d'importation (coût de revient réel) et dossiers d'exportation.
@@ -116,7 +116,7 @@ const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 // sections (une par feuille / page) pour un dossier d'importation (fiche de coût) ou d'exportation (facture)
-function ieDocumentDossier(kind, d, settings) {
+function ieDocumentDossier(kind, d, settings, OF) {
   const s = settings || {};
   const etapes = kind === "imp" ? IE_ETAPES_IMP : IE_ETAPES_EXP;
   const etape = (etapes.find((e) => e[0] === d.status) || [])[1] || d.status || "";
@@ -127,7 +127,7 @@ function ieDocumentDossier(kind, d, settings) {
     const charges = (d.charges || []).filter((x) => x.status !== "annulé");
     const genre = (k) => (IE_FRAIS.find((x) => x[0] === k) || [])[2] || "cout";
     const sommeLignes = ieR2(c.lineCosts.reduce((t, l) => t + l.total, 0));
-    const fiche = officeEntetePage(s, ecDateFr(todayStr())).concat([
+    const fiche = OF.officeEntetePage(s, ecDateFr(todayStr())).concat([
       { k: "p", t: "Fiche de coût de revient — " + (d.number || ""), g: true, s: 12, sp: 80 },
       { k: "p", s: 10, sp: 160, parts: [{ t: "Fournisseur : " }, { t: d.supplier || "", g: true }, { t: (d.country ? " (" + d.country + ")" : "") + (d.ref ? " · Réf. " + d.ref : "") + " · Facture du " + ecDateFr(d.date) + " · Taux " + d.rate + " G pour 1 USD · Étape : " + etape }] },
       { k: "tbl", style: "ligne",
@@ -146,7 +146,7 @@ function ieDocumentDossier(kind, d, settings) {
       { k: "p", t: "Les montants de droits et taxes sont ceux saisis d'après la quittance de douane.", s: 7.5, c: "555555" },
     ]);
     sections.push({ nom: "Fiche de coût", blocs: fiche });
-    if ((d.payments || []).length) sections.push({ nom: "Paiements", blocs: officeEntetePage(s, ecDateFr(todayStr())).concat([
+    if ((d.payments || []).length) sections.push({ nom: "Paiements", blocs: OF.officeEntetePage(s, ecDateFr(todayStr())).concat([
       { k: "p", t: "Paiements — " + (d.number || ""), g: true, s: 13, sp: 120 },
       { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 3, al: "l" }, { h: "Montant (USD)", sp: 3, al: "r" }, { h: "Écart de change (G)", sp: 3, al: "r" }, { h: "Statut", sp: 3, al: "l" }],
         lignes: d.payments.map((p) => [ecDateFr(p.date), dcU(p.usd), dcM(p.ecart), p.status || ""]), pieds: [] },
@@ -161,7 +161,7 @@ function ieDocumentDossier(kind, d, settings) {
   if (tcaUSD > 0) pieds.push([{ t: "TCA (" + d.tcaRate + " %)", cs: 3 }, dcU(tcaUSD)]);
   pieds.push([{ t: "Total à payer", cs: 3, g: true }, { ...dcU(totUSD), g: true }]);
   if (recu > 0) { pieds.push([{ t: "Déjà reçu", cs: 3 }, dcU(recu)]); pieds.push([{ t: "Reste à payer", cs: 3, g: true }, { ...dcU(ieR2(totUSD - recu)), g: true }]); }
-  sections.push({ nom: "Facture d'exportation", blocs: officeEntetePage(s, ecDateFr(todayStr())).concat([
+  sections.push({ nom: "Facture d'exportation", blocs: OF.officeEntetePage(s, ecDateFr(todayStr())).concat([
     { k: "p", t: "Facture d'exportation — " + (d.number || ""), g: true, s: 12, sp: 80 },
     { k: "p", s: 10, sp: 160, parts: [{ t: "Client : " }, { t: d.customer || "", g: true }, { t: (d.country ? " (" + d.country + ")" : "") + (d.ref ? " · Réf. " + d.ref : "") + " · Date : " + ecDateFr(d.date) + " · Taux : " + d.rate + " G pour 1 USD" }] },
     { k: "tbl", style: "ligne", cols: [{ h: "Désignation", sp: 6, al: "l" }, { h: "Quantité", sp: 2, al: "r" }, { h: "Prix unitaire (USD)", sp: 2, al: "r" }, { h: "Montant (USD)", sp: 2, al: "r" }],
@@ -169,12 +169,12 @@ function ieDocumentDossier(kind, d, settings) {
     { k: "espace", h: 1 },
     { k: "p", t: "Équivalent comptable au taux du dossier : " + fmt(c.totalHTG) + ".", s: 10 },
   ]) });
-  if ((d.costs || []).length) sections.push({ nom: "Frais", blocs: officeEntetePage(s, ecDateFr(todayStr())).concat([
+  if ((d.costs || []).length) sections.push({ nom: "Frais", blocs: OF.officeEntetePage(s, ecDateFr(todayStr())).concat([
     { k: "p", t: "Frais du dossier — " + (d.number || ""), g: true, s: 13, sp: 120 },
     { k: "tbl", style: "ligne", cols: [{ h: "Nature", sp: 4, al: "l" }, { h: "Montant (G)", sp: 2, al: "r" }, { h: "Statut", sp: 2, al: "l" }, { h: "Date", sp: 2, al: "l" }, { h: "Libellé", sp: 2, al: "l" }],
       lignes: d.costs.map((f) => [nomFrais(f.kind), dcM(f.amount), f.status || "", ecDateFr(f.date), f.label || ""]), pieds: [] },
   ]) });
-  if ((d.receipts || []).length) sections.push({ nom: "Encaissements", blocs: officeEntetePage(s, ecDateFr(todayStr())).concat([
+  if ((d.receipts || []).length) sections.push({ nom: "Encaissements", blocs: OF.officeEntetePage(s, ecDateFr(todayStr())).concat([
     { k: "p", t: "Encaissements — " + (d.number || ""), g: true, s: 13, sp: 120 },
     { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 3, al: "l" }, { h: "Montant (USD)", sp: 3, al: "r" }, { h: "Écart de change (G)", sp: 3, al: "r" }, { h: "Statut", sp: 3, al: "l" }],
       lignes: d.receipts.map((r) => [ecDateFr(r.date), dcU(r.usd), dcM(r.ecart), r.status || ""]), pieds: [] },
@@ -184,16 +184,18 @@ function ieDocumentDossier(kind, d, settings) {
 
 // Excel : un classeur mis en forme (un onglet par section), logo de l'entreprise en tête.
 async function ieExporterDossier(kind, d, settings) {
-  const doc = ieDocumentDossier(kind, d, settings);
-  const logo = await officeLogo(settings && settings.companyLogo, 50);
-  officeTelecharger(doc.fichier + ".xlsx", officeXlsx(doc.sections, { logo }), XLSX_TYPE);
+  const OF = await cpLoadChunk("office");
+  const doc = ieDocumentDossier(kind, d, settings, OF);
+  const logo = await OF.officeLogo(settings && settings.companyLogo, 50);
+  OF.officeTelecharger(doc.fichier + ".xlsx", OF.officeXlsx(doc.sections, { logo }), XLSX_TYPE);
 }
 
 // Word : un document mis en forme (une page par section), logo de l'entreprise en tête.
 async function ieExporterDossierWord(kind, d, settings) {
-  const doc = ieDocumentDossier(kind, d, settings);
-  const logo = await officeLogo(settings && settings.companyLogo, 50);
-  officeTelecharger(doc.fichier + ".docx", officeDocx(doc.sections, { logo }), DOCX_TYPE);
+  const OF = await cpLoadChunk("office");
+  const doc = ieDocumentDossier(kind, d, settings, OF);
+  const logo = await OF.officeLogo(settings && settings.companyLogo, 50);
+  OF.officeTelecharger(doc.fichier + ".docx", OF.officeDocx(doc.sections, { logo }), DOCX_TYPE);
 }
 
 function ImportExportModule({ impex, setImpex, entries, setEntries, accounts, setAccounts, products, setProducts, movements, setMovements, settings, role, showToast, logAudit, currentUserEmail }) {
@@ -818,7 +820,7 @@ function ImportExportModule({ impex, setImpex, entries, setEntries, accounts, se
           <div className="display text-base mb-2" style={{ color: "#152238" }}>Comment ça marche, en 7 étapes</div>
           <ol className="text-sm" style={{ color: "#152238", paddingLeft: 18, listStyle: "decimal" }}>{etapes.map(([t, d], i) => (<li key={i} data-testid="ie-etape" className="mb-1"><b>{t}</b> — <span style={{ color: "#5B563F" }}>{d}</span></li>))}</ol>
         </div>
-        {imps.length + exps.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#FFF6E0", color: "#152238" }} data-testid="ie-vide">Pour commencer : ouvrez l'onglet <b>Importations</b> ou <b>Exportations</b> et créez votre premier dossier. Vérifiez d'abord vos taux dans l'onglet <b>Réglages</b>.</div>}
+        {imps.length + exps.length === 0 && <div className="p-4 rounded text-sm mb-4" style={{ background: "#fff", border: "1px solid #E4DFD1", color: "#152238" }} data-testid="ie-vide">Pour commencer : ouvrez l'onglet <b>Importations</b> ou <b>Exportations</b> et créez votre premier dossier. Vérifiez d'abord vos taux dans l'onglet <b>Réglages</b>.</div>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {[["Importations en cours", String(impOuverts), "ie-kpi-imp-ouverts"], ["Dû aux fournisseurs", ieUsd(dettesUSD), "ie-kpi-dettes"], ["Exportations", String(exps.length), "ie-kpi-exp"], ["À recevoir des clients", ieUsd(creancesUSD), "ie-kpi-creances"]].map(([l, v, t]) => (
             <div key={t} className="ec-kpi"><div className="text-xs" style={{ color: "#8A8370" }}>{l}</div><div className="display text-lg tabular" data-testid={t} style={{ color: "#152238" }}>{v}</div></div>))}
