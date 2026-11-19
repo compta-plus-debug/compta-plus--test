@@ -54,7 +54,7 @@ const CHUNKS_ON = (process.env.CHUNKS || "on") !== "off";
 // Chunks de service : pas d'écran d'entrée ; ils exposent des fonctions appelées à la demande (cpLoadChunk).
 const SERVICE_CHUNKS = { office: ["officeDocx", "officeEntreprise", "officeEntetePage", "officeLogo", "officeTelecharger", "officeXlsx"] };
 const CHUNK_DEFS = {   // identifiant -> numéros des blocs (fichiers NN-….jsx)
-  office: ["71"],
+  office: ["71"], vente: ["23", "24"],
   admin: ["39"], superadmin: ["43"], centre: ["42"], paie: ["27"], gestion: ["31", "32", "33", "34"],
   compta: ["14", "18", "19", "47"], groupe: ["37"], stock: ["25"], creances: ["26"], caisse: ["21"], sante: ["54"], impex: ["53"], resto: ["58"], hotel: ["59"], transport: ["61"], immo: ["62"], btp: ["63"], indus: ["64"], agri: ["65"], ong: ["66"], services: ["67"], ecole: ["51", "52"],
 };
