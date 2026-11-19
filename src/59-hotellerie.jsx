@@ -1,6 +1,6 @@
 // ═══ MODULE ═══
 // @module Hotellerie
-// @depends EC_CSS, StatsBloc, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille, ecTelecharger
+// @depends EC_CSS, StatsBloc, cpLoadChunk, ecBorder, ecBtn, ecBtnGold, ecDateFr, ecInput, ecPastille, ecTelecharger
 //   isFutureDate, isLocked, statMois, statSomme, todayStr, uid, useState
 // @exports HotelModule
 // ═══ FIN DE L'EN-TÊTE ═══
@@ -62,6 +62,29 @@ function hoRedimensionner(file, max) {
   });
 }
 
+const HO_XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const HO_DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+// Export Word ou Excel du journal des séjours facturés (période de l'onglet Rapports).
+async function hoExporterJournal(kind, d) {
+  const OF = await cpLoadChunk("office");
+  const st = d.settings || {};
+  const somme = (f) => hoR2(d.jours.reduce((s, j) => s + f(d.parJour[j]), 0));
+  const lignes = d.jours.map((j) => { const x = d.parJour[j]; return [
+    ecDateFr(j), { t: String(x.nb), al: "r" }, { t: String(x.nuits), al: "r" }, { t: hoM(x.heberg), al: "r" }, { t: hoM(x.services), al: "r" },
+    { t: hoM(x.sejour), al: "r" }, { t: hoM(x.tca), al: "r" }, { t: hoM(x.total), al: "r", g: true }, { t: hoM(x.esp), al: "r" }, { t: hoM(x.ban), al: "r" }]; });
+  const pied = [{ t: "TOTAL", g: true }, { t: String(somme((x) => x.nb)), al: "r", g: true }, { t: String(somme((x) => x.nuits)), al: "r", g: true },
+    { t: hoM(somme((x) => x.heberg)), al: "r", g: true }, { t: hoM(somme((x) => x.services)), al: "r", g: true }, { t: hoM(somme((x) => x.sejour)), al: "r", g: true },
+    { t: hoM(somme((x) => x.tca)), al: "r", g: true }, { t: hoM(somme((x) => x.total)), al: "r", g: true }, { t: hoM(somme((x) => x.esp)), al: "r", g: true }, { t: hoM(somme((x) => x.ban)), al: "r", g: true }];
+  const blocs = OF.officeEntreprise(st, "JOURNAL DES SÉJOURS — HÔTELLERIE").concat([
+    { k: "p", s: 9, sp: 80, parts: [{ t: "Période : " }, { t: ecDateFr(d.du) + " au " + ecDateFr(d.au), g: true }, { t: " · établi le " + ecDateFr(d.today) }] },
+    { k: "tbl", style: "ligne", cols: [{ h: "Date", sp: 3, al: "l" }, { h: "Séjours", sp: 1, al: "r" }, { h: "Nuitées", sp: 1, al: "r" }, { h: "Hébergement", sp: 1, al: "r" }, { h: "Services", sp: 1, al: "r" }, { h: "Taxe séjour", sp: 1, al: "r" }, { h: "TCA", sp: 1, al: "r" }, { h: "Total", sp: 1, al: "r" }, { h: "Espèces", sp: 1, al: "r" }, { h: "Banque", sp: 1, al: "r" }],
+      lignes, pieds: [pied] },
+  ]);
+  const doc = { fichier: "Journal-hotellerie-" + d.du + "_" + d.au, sections: [{ nom: "Journal", blocs }] };
+  const logo = await OF.officeLogo(st.companyLogo, 50);
+  if (kind === "xlsx") OF.officeTelecharger(doc.fichier + ".xlsx", OF.officeXlsx(doc.sections, { logo }), HO_XLSX_TYPE);
+  else OF.officeTelecharger(doc.fichier + ".docx", OF.officeDocx(doc.sections, { logo }), HO_DOCX_TYPE);
+}
 function HotelModule({ hotel, setHotel, entries, setEntries, accounts, setAccounts, settings, role, showToast, logAudit, currentUserEmail }) {
   const canEdit = role === "Administrateur" || role === "Éditeur";
   const isVendeur = role === "Vendeur"; // réception : réservations, arrivées, départs, encaissements
@@ -613,7 +636,7 @@ function HotelModule({ hotel, setHotel, entries, setEntries, accounts, setAccoun
         <div className="ec-card p-4 mb-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
           <div>{lab("Du")}<input type="date" value={rp.from} onChange={(e) => setRp({ ...rp, from: e.target.value })} data-testid="hotel-rp-du" className={ecInput} style={ecBorder} /></div>
           <div>{lab("Au")}<input type="date" value={rp.to} onChange={(e) => setRp({ ...rp, to: e.target.value })} data-testid="hotel-rp-au" className={ecInput} style={ecBorder} /></div>
-          <div><button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="hotel-rapport-export">Exporter le journal (CSV)</button></div>
+          <div><button onClick={exporter} className="px-3 py-2 rounded text-sm" style={ecBtn} data-testid="hotel-rapport-export">Exporter le journal (CSV)</button><button onClick={() => hoExporterJournal("xlsx", { jours, parJour, du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Excel impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="hotel-journal-excel">Excel</button><button onClick={() => hoExporterJournal("docx", { jours, parJour, du: rp.from, au: rp.to, today, settings }).catch((e) => showToast(e.message || "Export Word impossible."))} className="px-3 py-2 rounded text-sm ml-2" style={ecBtn} data-testid="hotel-journal-word">Word</button></div>
         </div></div>
         <div className="display text-base" style={{ color: "#152238" }}>Journal des ventes par jour (séjours facturés)</div>
         <div className="ec-wrap mb-5"><table className="ec-table"><thead><tr className="text-left text-xs" style={{ color: "#8A8370" }}><th className="py-1">Date</th><th className="text-right">Séjours</th><th className="text-right">Nuitées</th><th className="text-right">Hébergement</th><th className="text-right">Services</th><th className="text-right">Taxe séjour</th><th className="text-right">TCA</th><th className="text-right">Total</th><th className="text-right">Espèces</th><th className="text-right">Banque</th></tr></thead>
