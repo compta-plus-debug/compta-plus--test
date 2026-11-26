@@ -59,7 +59,7 @@ const menu=async(P,label)=>{await P.getByText(label,{exact:true}).first().click(
     const P=A.p;
     await P.waitForTimeout(9000);
     const n=await P.evaluate(()=>Object.keys(window.__cpc||{}).length);
-    const nChunks=require('fs').readdirSync(require('path').join(__dirname,'docs','chunks')).filter(f=>f.endsWith('.js')).length;
+    const nChunks=require('fs').readdirSync(cdir).filter(f=>f.endsWith('.js')).length; // même dossier que celui servi au test
     ok('préchargement : les '+nChunks+' fichiers de chunks sont arrivés',n===nChunks,{n,nChunks,reqs});
     await A.ctx.setOffline(true);
     await menu(P,'Stock et inventaire');
