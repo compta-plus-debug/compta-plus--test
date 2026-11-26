@@ -35,6 +35,19 @@ console.log("Frontières entre modules vérifiées (" + lues.filter((x) => x.tex
 if (dep.problemes.length) { console.error("BLOQUÉ — frontières entre modules :"); dep.problemes.forEach((x) => console.error("  ✗ " + x)); process.exit(1); }
 let source = noms.map((n) => fs.readFileSync(path.join(dossierParties, n), "utf8")).join("");
 
+// Numéro de version automatique : date du jour (fuseau du Mexique) + compteur du paquet (build/paquet.txt).
+// Dans src/00-config.jsx la ligne reste « __AUTO__ » : elle n'est jamais retouchée à la main.
+{
+  const fichierCompteur = [path.join(dossierScript, "paquet.txt"), path.join(racine, "build", "paquet.txt"), path.join(racine, "paquet.txt")].find((f) => fs.existsSync(f));
+  const compteur = fichierCompteur ? fs.readFileSync(fichierCompteur, "utf8").trim() : "";
+  if (!/^\d{1,3}$/.test(compteur)) { console.error("BLOQUÉ — compteur du paquet introuvable ou invalide (build/paquet.txt)."); process.exit(1); }
+  const jour = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).replace(/-/g, "");
+  const remplacer = (t) => t.replace('const APP_VERSION = "__AUTO__";', 'const APP_VERSION = "' + jour + "-" + compteur.padStart(3, "0") + '";');
+  source = remplacer(source);
+  // Les morceaux (lues) servent à assembler le cœur de l'application : la même substitution doit y figurer.
+  for (const x of lues) x.texte = remplacer(x.texte);
+}
+
 // 2) Cible TEST : même substitution que l'ancienne publication (première occurrence par ligne)
 const appliquerCible = (texte) => {
   if (cible !== "test") return texte;
@@ -244,6 +257,23 @@ for (const [id, code] of Object.entries(chunkFiles)) {
   fs.writeFileSync(path.join(sortie, "chunks", id + ".js"), code);
 }
 fs.writeFileSync(path.join(sortie, "index.html"), indexFinal);
+// Feuilles de styles de la refonte visuelle (refonte-*.css) : copiées à côté de index.html.
+// Si la page les demande et qu'un fichier manque, la construction s'arrête.
+const feuillesRefonte = fs.readdirSync(path.join(racine, "src")).filter((f) => /^refonte-.*\.css$/.test(f));
+for (const nom of feuillesRefonte) fs.copyFileSync(path.join(racine, "src", nom), path.join(sortie, nom));
+if (feuillesRefonte.length) console.log("Feuilles de refonte copiées : " + feuillesRefonte.join(", "));
+// Cache du navigateur : le nom du cache suit la version de l'application (plus de retouche à la main de sw.js).
+const swFichier = path.join(sortie, "sw.js");
+if (fs.existsSync(swFichier)) {
+  const sw = fs.readFileSync(swFichier, "utf8");
+  const sw2 = sw.replace(/const CACHE_NAME = "[^"]*";/, 'const CACHE_NAME = "compta-plus-cache-' + m[1] + '";');
+  if (sw2 === sw && !sw.includes('"compta-plus-cache-' + m[1] + '"')) { console.error("BLOQUÉ — ligne CACHE_NAME introuvable dans sw.js."); process.exit(1); }
+  fs.writeFileSync(swFichier, sw2);
+  console.log("Cache du navigateur : compta-plus-cache-" + m[1]);
+}
+for (const m of indexFinal.matchAll(/href="(refonte-[^"?]+\.css)/g)) {
+  if (!fs.existsSync(path.join(sortie, m[1]))) { console.error("BLOQUÉ — la page demande " + m[1] + " mais le fichier est introuvable."); process.exit(1); }
+}
 for (const [rel, buf] of vendorOut) {
   const dest = path.join(sortie, rel);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
