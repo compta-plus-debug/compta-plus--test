@@ -7,7 +7,7 @@ const initGroupe=()=>{const S=window.__srv;S.tables.platform_admins=[];S.tables.
  S.tables.company_members=[{id:7,company_id:'c1',email:'a@x.com',role:'Administrateur',user_id:'u1',is_primary_admin:true,created_at:'2026-01-01'}];
 };
 (async()=>{const b=await chromium.launch(process.env.CHROMIUM?{executablePath:process.env.CHROMIUM}:{});
-const sortie=process.env.SORTIE_CAPTURE||'/tmp/claude-0/groupe';
+const sortie=process.env.SORTIE_CAPTURE||require('path').join(require('os').tmpdir(),'groupe');
 for(const w of [1280,390]){
  const {p,errs}=await boot(b,{ctx:await b.newContext({viewport:{width:w,height:900}}),skipSeed:true,pageInit:new Function('('+initGroupe.toString()+')()'),settings:{companyName:'Lakay SA'}});
  await p.waitForTimeout(1500);
@@ -28,4 +28,4 @@ for(const w of [1280,390]){
  await p.screenshot({path:sortie+'-'+w+'.png',fullPage:true});
  await p.context().close();
 }
-await b.close();console.log(fails?fails+' échec(s)':'tous PASS');process.exit(fails?1:0);})().catch(e=>{console.error(e);process.exit(1)});
+await b.close();console.log(fails?fails+' échec(s)':'TOUT PASSE');process.exit(fails?1:0);})().catch(e=>{console.error(e);process.exit(1)});
