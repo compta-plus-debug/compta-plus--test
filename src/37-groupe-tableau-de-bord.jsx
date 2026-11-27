@@ -41,7 +41,7 @@ main .compta-groupe table thead th {
 main .compta-groupe table tbody td { padding: 9px 12px; line-height: 1.4; vertical-align: middle; }
 main .compta-groupe table tbody tr:nth-child(even) { background: #FAF8F1; }
 main .compta-groupe table tbody tr { border-bottom: 1px solid #EEF1F5; }
-main .compta-groupe .overflow-x-auto { border: 1px solid #E4E9F1; border-radius: 12px; background: #fff; padding: 4px 12px; }
+main .compta-groupe .overflow-x-auto { border: 1px solid rgba(31, 169, 122, .45); border-radius: 12px; background: #fff; padding: 4px 12px; }
 /* Hybride (maquette retenue) — fond gris clair, onglets en pastilles, cartes à bordure fine */
 main .compta-groupe { background: #F3F5F8; min-height: 100vh; }
 main .compta-groupe .grid.sm\:grid-cols-2 > div { border: 1px solid #E4E9F1; box-shadow: none; }
@@ -60,7 +60,7 @@ main .compta-groupe .bg-white.rounded-lg { padding: 16px; }
 main .compta-groupe .bg-white.rounded-lg.p-6 { padding: 18px; }
 main .compta-groupe .bg-white .text-xl { font-variant-numeric: tabular-nums; }
 /* Fond bleu nuit (choisi dans Paramètres) : la page passe en bleu, les cartes restent blanches */
-.compta-groupe.fond-bleu { background: #14213A; }
+.compta-groupe.fond-bleu { background: #0C2D61; }
 .compta-groupe.fond-bleu .gr-titre { color: #EEF2F8 !important; }
 .compta-groupe.fond-bleu .gr-tab { background: transparent; border-color: #2C3D5C; color: #B9C6DA; }
 .compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; }
@@ -412,7 +412,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
         ))}
       </div>
 
-      {tab === "parametres" && <>
+      {tab === "parametres" && <div className="flex flex-col gap-3.5 mb-6">
         <div className="gr-carte" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: "#14213A" }}>Présentation</div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -474,7 +474,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             <div style={{ fontSize: 12, color: "#6B7A90" }}>Pour supprimer ce groupe, adressez-vous à l'administrateur de la plateforme : ses entreprises sont détachées et gardent leurs données.</div>
           </div>
         </>}
-      </>}
+      </div>}
 
       {loadError && (
         <div className="text-xs p-3 rounded mb-4" style={{ background: "#F7E9E3", color: "#A6432F" }}>
@@ -563,7 +563,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             )}
           </div>}
 
-          {tab === "finances" && <>
+          {tab === "finances" && <div className="flex flex-col gap-3.5 mb-6">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
               {[
                 ["Chiffre d'affaires consolidé", totals.produits, "#14213A"],
@@ -642,9 +642,9 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             </div>
           )}
 
-          </>}
+          </div>}
 
-          {tab === "equipe" && role === "Administrateur" && <>
+          {tab === "equipe" && role === "Administrateur" && <div className="flex flex-col gap-3.5 mb-6">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "#14213A" }}>Collaborateurs ({membresGroupe.length})</span>
               <button onClick={() => { setShowAddCollab((v) => !v); setNewCollabCompanies(Object.fromEntries(companiesData.map((c) => [c.id, true]))); }}
@@ -725,9 +725,9 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
               <span>Administrateur : accès complet, gestion des collaborateurs.</span>
               <span>Vendeur : ventes et factures uniquement.</span>
             </div>
-          </>}
+          </div>}
 
-          {tab === "journal" && role === "Administrateur" && <>
+          {tab === "journal" && role === "Administrateur" && <div className="flex flex-col gap-3.5 mb-6">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {["Tout", "Ventes", "Dépenses", "Accès"].map((f) => (
                 <button key={f} onClick={() => setFiltreJournal(f)}
@@ -749,7 +749,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
               })}
             </div>
             {journalFiltre.length === 0 && <p style={{ fontSize: 13, color: "#6B7A90" }}>Aucune action pour ce filtre.</p>}
-          </>}
+          </div>}
 
           {tab === "entreprises" && role === "Administrateur" && companiesData.length >= 2 && (
             <div className="bg-white rounded-lg p-4 mb-6" style={{ border: "1px solid #E4DFD1" }}>
