@@ -47,6 +47,15 @@ main .compta-groupe .gr-tabs { display: flex; gap: 6px; overflow-x: auto; margin
 main .compta-groupe .gr-tab { flex: 0 0 auto; background: #fff; border: 1px solid #DDE3EC; border-radius: 999px; padding: 8px 14px; font-size: 13px; color: #5A6B85; white-space: nowrap; cursor: pointer; }
 main .compta-groupe .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; font-weight: 600; }
 main .compta-groupe .gr-titre { color: #14213A; }
+/* Cartes blanches du groupe (vue d'ensemble, comparatif, collaborateurs, journal…) : bordure fine, coins arrondis, libellés sobres */
+main .compta-groupe .bg-white { border: 1px solid #E4E9F1 !important; border-radius: 14px !important; box-shadow: 0 1px 2px rgba(20, 33, 58, .05); }
+main .compta-groupe .bg-white > .text-xs { color: #6B7A90 !important; }
+main .compta-groupe .bg-white .text-xs { color: #6B7A90; }
+main .compta-groupe .display { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-weight: 600; letter-spacing: -.01em; }
+main .compta-groupe .display.text-2xl { font-size: 24px; }
+main .compta-groupe .bg-white.rounded-lg { padding: 16px; }
+main .compta-groupe .bg-white.rounded-lg.p-6 { padding: 18px; }
+main .compta-groupe .bg-white .text-xl { font-variant-numeric: tabular-nums; }
 /* Fond bleu nuit (choisi dans Paramètres) : la page passe en bleu, les cartes restent blanches */
 .compta-groupe.fond-bleu { background: #14213A; }
 .compta-groupe.fond-bleu .gr-titre { color: #EEF2F8 !important; }
