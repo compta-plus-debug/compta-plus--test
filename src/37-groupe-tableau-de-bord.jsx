@@ -60,8 +60,14 @@ main .compta-groupe .bg-white.rounded-lg { padding: 16px; }
 main .compta-groupe .bg-white.rounded-lg.p-6 { padding: 18px; }
 main .compta-groupe .bg-white .text-xl { font-variant-numeric: tabular-nums; }
 /* Fond bleu nuit (choisi dans Paramètres) : la page passe en bleu, les cartes restent blanches */
-.compta-groupe.fond-bleu { background: #0C2D61; }
-.compta-groupe.fond-bleu .gr-titre { color: #EEF2F8 !important; }
+.compta-groupe.fond-bleu { background: #1F4A85; }
+/* Sur le fond bleu, les textes hors cartes deviennent lisibles : bleu marine -> jaune, gris -> gris clair */
+.compta-groupe.fond-bleu .gr-titre { color: #E0B54E !important; }
+.compta-groupe.fond-bleu [style*="rgb(20, 33, 58)"] { color: #E0B54E !important; }
+.compta-groupe.fond-bleu [style*="rgb(107, 122, 144)"], .compta-groupe.fond-bleu p, .compta-groupe.fond-bleu > div > .text-xs { color: #DCE3EE !important; }
+.compta-groupe.fond-bleu .gr-carte [style*="rgb(20, 33, 58)"] { color: #EEF2F8 !important; }
+.compta-groupe.fond-bleu .gr-carte [style*="rgb(107, 122, 144)"] { color: #B9C6DA !important; }
+.compta-groupe.fond-bleu .gr-carte p { color: #B9C6DA !important; }
 .compta-groupe.fond-bleu .gr-tab { background: transparent; border-color: #2C3D5C; color: #B9C6DA; }
 .compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; }
 /* Cartes de la maquette Hybride : bordure fine, coins 14px, fond blanc ; variante bleue en sombre */
