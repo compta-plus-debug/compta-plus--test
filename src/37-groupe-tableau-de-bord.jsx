@@ -40,6 +40,17 @@ main .compta-groupe table thead th {
 }
 main .compta-groupe table tbody td { padding: 9px 12px; line-height: 1.4; vertical-align: middle; }
 main .compta-groupe table tbody tr:nth-child(even) { background: #FAF8F1; }
+/* Hybride — onglets (maquette D) */
+main .compta-groupe .gr-tabs { display: flex; gap: 4px; border-bottom: 1px solid #E4DFD1; margin: 0 0 20px; overflow-x: auto; }
+main .compta-groupe .gr-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font-size: 13px; color: #7A7460; white-space: nowrap; cursor: pointer; }
+main .compta-groupe .gr-tab[aria-selected="true"] { color: #152238; font-weight: 600; border-bottom-color: #C9A24B; }
+main .compta-groupe .gr-titre { color: #152238; }
+/* Fond de présentation bleu (choisi dans Paramètres) — les cartes restent blanches */
+.compta-groupe.fond-bleu { background: #14203A; border-radius: 12px; }
+.compta-groupe.fond-bleu .gr-titre { color: #EFE9DD !important; }
+.compta-groupe.fond-bleu .gr-tabs { border-bottom-color: rgba(255,255,255,.18); }
+.compta-groupe.fond-bleu .gr-tab { color: #C9D3E6; }
+.compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { color: #fff; }
 `;
 
 function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlanStatus, groupTrialEndsAt, companyId, role, showToast, onGroupRenamed, onRequestsChanged, onEnterCurrentCompany, onJumpToModule, onBackToPlatform, onSignOut }) {
@@ -50,7 +61,10 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
   const [newCompanyName, setNewCompanyName] = useState("");
   const [duplicateFromId, setDuplicateFromId] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [tab, setTab] = useState("entreprises");
+  // Fond d'affichage (bleu ou blanc) : mémorisé sur cet appareil uniquement.
+  const [fondBleu, setFondBleu] = useState(() => { try { return localStorage.getItem("compta_groupe_fond") === "bleu"; } catch (e) { return false; } });
+  const choisirFond = (bleu) => { setFondBleu(bleu); try { localStorage.setItem("compta_groupe_fond", bleu ? "bleu" : "blanc"); } catch (e) {} };
   const [joinRequests, setJoinRequests] = useState([]);
   const [respondingRequestId, setRespondingRequestId] = useState(null);
   const [editGroupName, setEditGroupName] = useState(groupName || "");
@@ -278,7 +292,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl compta-groupe">
+    <div className={"p-4 md:p-8 max-w-6xl compta-groupe" + (fondBleu ? " fond-bleu" : "")}>
       <style>{GROUPE_CSS}</style>
       <div className="rounded-lg p-6 mb-6 flex items-center justify-between flex-wrap gap-3"
         style={{ background: "linear-gradient(135deg, #152238 0%, #1F3358 100%)" }}>
@@ -300,19 +314,36 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
               Se déconnecter
             </button>
           )}
-          {role === "Administrateur" && (
-            <button onClick={() => { setShowSettings((v) => !v); setEditGroupName(groupName || ""); }}
-              className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5" style={{ background: "rgba(255,255,255,0.12)", color: "#EFE9DD" }}>
-              {showSettings ? "Fermer" : "Paramètres du groupe"}
-              {!showSettings && joinRequests.length > 0 && (
-                <span className="text-xs px-1.5 rounded-full text-white" style={{ background: "#D9756B" }}>{joinRequests.length}</span>
-              )}
-            </button>
-          )}
         </div>
       </div>
 
-      {showSettings && (
+      <div className="gr-tabs" role="tablist">
+        {[
+          { id: "entreprises", label: "Entreprises" },
+          { id: "finances", label: "Finances" },
+          ...(role === "Administrateur" ? [{ id: "equipe", label: "Équipe" }, { id: "journal", label: "Journal" }] : []),
+          { id: "parametres", label: "Paramètres" + (role === "Administrateur" && joinRequests.length > 0 ? ` (${joinRequests.length})` : "") },
+        ].map((o) => (
+          <button key={o.id} role="tab" aria-selected={tab === o.id} className="gr-tab"
+            onClick={() => { setTab(o.id); if (o.id === "parametres") setEditGroupName(groupName || ""); }}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "parametres" && (
+        <div className="bg-white rounded-lg p-5 mb-6" style={{ border: "1px solid #E4DFD1" }}>
+          <div className="display text-lg mb-3" style={{ color: "#152238" }}>Présentation</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm" style={{ color: "#7A7460" }}>Fond de l'espace groupe : {fondBleu ? "bleu" : "blanc"}</span>
+            <button onClick={() => choisirFond(!fondBleu)} className="text-xs px-3 py-2 rounded text-white" style={{ background: "#152238" }}>
+              {fondBleu ? "Passer en fond blanc" : "Passer en fond bleu"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === "parametres" && role === "Administrateur" && (
         <div className="bg-white rounded-lg p-5 mb-6" style={{ border: "1px solid #E4DFD1" }}>
           <div className="display text-lg mb-4" style={{ color: "#152238" }}>Paramètres du groupe</div>
 
@@ -386,8 +417,8 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
         <div className="text-sm py-8 text-center" style={{ color: "#A39C87" }}>Chargement...</div>
       ) : (
         <>
-          <div className="mb-6">
-            <div className="display text-lg mb-3" style={{ color: "#152238" }}>Vos entreprises</div>
+          {tab === "entreprises" && <div className="mb-6">
+            <div className="display text-lg mb-3 gr-titre" style={{ color: "#152238" }}>Vos entreprises</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {companiesData.map((c, i) => {
                 const isCurrent = c.id === companyId;
@@ -440,9 +471,10 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
                 <p className="text-xs" style={{ color: "#A39C87" }}>Aucune entreprise dans ce groupe pour l'instant.</p>
               )}
             </div>
-          </div>
+          </div>}
 
-          <div className="display text-lg mb-3" style={{ color: "#152238" }}>Vue d'ensemble consolidée</div>
+          {tab === "finances" && <>
+          <div className="display text-lg mb-3 gr-titre" style={{ color: "#152238" }}>Vue d'ensemble consolidée</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}>
               <div className="text-xs mb-1" style={{ color: "#A39C87" }}>Chiffre d'affaires consolidé</div>
@@ -555,8 +587,9 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
               </div>
             </div>
           )}
+          </>}
 
-          {role === "Administrateur" && (
+          {tab === "equipe" && role === "Administrateur" && (
             <div className="bg-white rounded-lg p-4 mb-6" style={{ border: "1px solid #E4DFD1" }}>
               <div className="display text-lg mb-1" style={{ color: "#152238" }}>Collaborateurs du groupe</div>
               <p className="text-xs mb-3" style={{ color: "#A39C87" }}>Gérez l'accès d'une personne à une ou plusieurs entreprises du groupe depuis un seul endroit.</p>
@@ -628,7 +661,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             </div>
           )}
 
-          {role === "Administrateur" && (
+          {tab === "journal" && role === "Administrateur" && (
             <div className="bg-white rounded-lg p-4 mb-6" style={{ border: "1px solid #E4DFD1" }}>
               <div className="display text-lg mb-3" style={{ color: "#152238" }}>Journal d'audit consolidé</div>
               {companiesData.every((c) => (c.auditLog || []).length === 0) ? (
@@ -653,7 +686,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             </div>
           )}
 
-          {role === "Administrateur" && companiesData.length >= 2 && (
+          {tab === "entreprises" && role === "Administrateur" && companiesData.length >= 2 && (
             <div className="bg-white rounded-lg p-4 mb-6" style={{ border: "1px solid #E4DFD1" }}>
               <div className="display text-lg mb-1" style={{ color: "#152238" }}>Transfert inter-entreprises</div>
               <p className="text-xs mb-3" style={{ color: "#A39C87" }}>Envoyez du stock d'une entreprise à une autre du groupe — la sortie et l'entrée se créent automatiquement des deux côtés, de façon tracée. Chaque entreprise garde sa comptabilité séparée.</p>
@@ -764,7 +797,7 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
             </div>
           )}
 
-          {role === "Administrateur" && (
+          {tab === "entreprises" && role === "Administrateur" && (
             <div className="bg-white rounded-lg p-4" style={{ border: "1px solid #E4DFD1" }}>
               <div className="text-sm font-semibold mb-2" style={{ color: "#152238" }}>Ajouter une entreprise au groupe</div>
               {companiesData.length >= (groupMaxCompanies || 5) ? (
