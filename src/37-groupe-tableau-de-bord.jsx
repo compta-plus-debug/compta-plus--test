@@ -62,6 +62,13 @@ main .compta-groupe .bg-white .text-xl { font-variant-numeric: tabular-nums; }
 .compta-groupe.fond-bleu .gr-titre { color: #EEF2F8 !important; }
 .compta-groupe.fond-bleu .gr-tab { background: transparent; border-color: #2C3D5C; color: #B9C6DA; }
 .compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; }
+/* Cartes de la maquette Hybride : bordure fine, coins 14px, fond blanc ; variante bleue en sombre */
+main .compta-groupe .gr-carte { background: #fff; border: 1px solid #E4E9F1; border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 33, 58, .05); }
+main .compta-groupe .gr-sous { background: #F3F5F8; }
+.compta-groupe.fond-bleu .gr-carte { background: #1B2B45; border-color: #2C3D5C; color: #EEF2F8; }
+.compta-groupe.fond-bleu .gr-sous { background: #223553; }
+.compta-groupe.fond-bleu .gr-carte [style*="rgb(20, 33, 58)"], .compta-groupe.fond-bleu .gr-carte [style*="rgb(21, 34, 56)"] { color: #EEF2F8 !important; }
+.compta-groupe.fond-bleu .gr-carte [style*="rgb(107, 122, 144)"] { color: #B9C6DA !important; }
 /* Variante bleue (maquette « sombre ») : cartes #1B2B45, texte clair, lignes #223553. Les couleurs en ligne sont reprises par leur valeur rgb. */
 .compta-groupe.fond-bleu .bg-white { background: #1B2B45 !important; border-color: #2C3D5C !important; color: #EEF2F8; }
 .compta-groupe.fond-bleu .bg-white [style*="rgb(21, 34, 56)"] { color: #EEF2F8 !important; }
@@ -134,8 +141,20 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
       const activeEmployeeCount = employees.filter((e) => e.active !== false).length;
       const balances = computeBalances(accounts, entries);
       const kpis = computeKpis(accounts, balances);
+      // Chiffre d'affaires mois par mois (12 derniers mois) : comptes de produits, crédit moins débit.
+      const maintenant = new Date();
+      const cles = Array.from({ length: 12 }, (_, i) => { const d = new Date(maintenant.getFullYear(), maintenant.getMonth() - 11 + i, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); });
+      const codesProduits = new Set(accounts.filter((a) => a.type === "Produit").map((a) => a.code));
+      const serieCA = cles.map((cle) => {
+        let total = 0;
+        entries.forEach((e) => {
+          if (!String(e.date || "").startsWith(cle)) return;
+          (e.lines || []).forEach((l) => { if (codesProduits.has(l.account)) total += Number(l.credit || 0) - Number(l.debit || 0); });
+        });
+        return total;
+      });
       return {
-        id: s.id, name: s.name, planStatus: s.plan_status, kpis,
+        id: s.id, name: s.name, planStatus: s.plan_status, kpis, serieCA,
         type: compSettings.companyType || "", secteur: compSettings.companySecteurNom || "",
         auditLog, products, movements, masseSalariale, activeEmployeeCount,
       };
@@ -176,6 +195,25 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
     masseSalariale: acc.masseSalariale + (c.masseSalariale || 0),
     activeEmployeeCount: acc.activeEmployeeCount + (c.activeEmployeeCount || 0),
   }), { produits: 0, charges: 0, resultat: 0, tresorerie: 0, masseSalariale: 0, activeEmployeeCount: 0 });
+
+  const serieGroupe = Array.from({ length: 12 }, (_, i) => companiesData.reduce((s, c) => s + ((c.serieCA || [])[i] || 0), 0));
+  const totalGroupe12Mois = serieGroupe.reduce((s, v) => s + v, 0);
+
+  const ouvrirEntreprise = async (c, targetModule) => {
+    const isCurrent = c.id === companyId;
+    if (isCurrent) {
+      // Déjà l'entreprise résolue par la session : pas besoin de la re-choisir.
+      if (targetModule && onJumpToModule) { onJumpToModule(targetModule); return; }
+      if (onEnterCurrentCompany) { onEnterCurrentCompany(); return; }
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) await chooseCompany(c.id, user.id);
+    try {
+      sessionStorage.setItem("compta_skip_landing", "1");
+      if (targetModule) sessionStorage.setItem("compta_jump_to_module", targetModule);
+    } catch (e) {}
+    window.location.reload();
+  };
 
   const renameGroup = async () => {
     const name = editGroupName.trim();
@@ -436,60 +474,81 @@ function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlan
         <div className="text-sm py-8 text-center" style={{ color: "#A39C87" }}>Chargement...</div>
       ) : (
         <>
-          {tab === "entreprises" && <div className="mb-6">
-            <div className="display text-lg mb-3 gr-titre" style={{ color: "#152238" }}>Vos entreprises</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {companiesData.map((c, i) => {
-                const isCurrent = c.id === companyId;
-                const openThisCompany = async (targetModule) => {
-                  if (isCurrent) {
-                    // Déjà l'entreprise résolue par la session — inutile de la
-                    // re-choisir ou de recharger la page, un simple changement
-                    // d'onglet actif suffit à y entrer immédiatement.
-                    if (targetModule && onJumpToModule) { onJumpToModule(targetModule); return; }
-                    if (onEnterCurrentCompany) { onEnterCurrentCompany(); return; }
-                  }
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (user) await chooseCompany(c.id, user.id);
-                  try {
-                    sessionStorage.setItem("compta_skip_landing", "1");
-                    if (targetModule) sessionStorage.setItem("compta_jump_to_module", targetModule);
-                  } catch (e) {}
-                  window.location.reload();
-                };
+          {tab === "entreprises" && <div className="flex flex-col gap-3.5 mb-6">
+            <div className="gr-carte" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="flex justify-between" style={{ fontSize: 12, color: "#6B7A90" }}><span>Chiffre d'affaires consolidé</span><span>12 mois</span></div>
+              <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 24, fontWeight: 600, color: "#14213A" }}>{fmt(totalGroupe12Mois)}</div>
+              {(() => {
+                const maxV = Math.max(1, ...serieGroupe);
+                const pts = serieGroupe.map((v, i) => [(i * 354) / 11, 90 - (v / maxV) * 78]);
+                const ligne = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+                const aire = ligne + " L354,90 L0,90 Z";
+                const dernier = pts[pts.length - 1];
                 return (
-                <div key={c.id} onClick={() => openThisCompany()}
-                  className="rounded-lg p-4" style={{ background: "#FAF8F1", border: isCurrent ? "1px solid #C9A24B" : "1px solid #E4DFD1", cursor: "pointer" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-xs mb-1" style={{ color: "#A39C87" }}>Entreprise {i + 1}{isCurrent ? " — celle-ci" : ""}</div>
-                      <div className="text-sm font-semibold mb-1" style={{ color: "#152238" }}>{c.name}</div>
-                      <div className="text-xs" style={{ color: "#7A7460" }}>
-                        {c.type || "Type non renseigné"} {c.secteur ? `· ${c.secteur}` : ""}
-                      </div>
+                  <svg viewBox="0 0 354 96" width="100%" height="96" style={{ maxWidth: "100%" }}>
+                    <defs>
+                      <linearGradient id="gr-aire-ca" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0" stopColor="#E0B54E" stopOpacity=".35" />
+                        <stop offset="1" stopColor="#E0B54E" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <line x1="0" y1="90" x2="354" y2="90" stroke="#E4E9F1" />
+                    <path d={aire} fill="url(#gr-aire-ca)" />
+                    <path d={ligne} fill="none" stroke="#14213A" strokeWidth="2" />
+                    <circle cx={dernier[0]} cy={dernier[1]} r="4" fill="#E0B54E" />
+                  </svg>
+                );
+              })()}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+              {[
+                ["Charges", fmt(totals.charges), "#A6432F"],
+                ["Résultat", fmt(totals.resultat), totals.resultat >= 0 ? "#1E7A5C" : "#A6432F"],
+                ["Trésorerie", fmt(totals.tresorerie), "#14213A"],
+              ].map(([libelle, valeur, couleur]) => (
+                <div key={libelle} className="gr-carte" style={{ padding: 10 }}>
+                  <div style={{ fontSize: 11, color: "#6B7A90" }}>{libelle}</div>
+                  <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 13, fontWeight: 600, color: couleur, marginTop: 3 }}>{valeur}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="gr-titre" style={{ fontSize: 14, fontWeight: 600, color: "#14213A" }}>Entreprises du groupe</div>
+            {companiesData.map((c) => {
+              const isCurrent = c.id === companyId;
+              const statut = c.planStatus === "active"
+                ? { libelle: "Actif", fond: "#E4F3EC", texte: "#1E7A5C" }
+                : c.planStatus === "trial"
+                  ? { libelle: "Essai", fond: "#FFF3D6", texte: "#8A6200" }
+                  : { libelle: "Suspendu", fond: "#F7E9E3", texte: "#A6432F" };
+              return (
+                <div key={c.id} className="gr-carte" onClick={() => ouvrirEntreprise(c)}
+                  style={{ padding: 14, borderLeft: "4px solid #E0B54E", display: "flex", flexDirection: "column", gap: 10, cursor: "pointer" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: "#14213A" }}>{c.name}</span>
+                      <span style={{ fontSize: 12, color: "#6B7A90" }}>{isCurrent ? "Celle-ci · " : ""}{c.type || "Type non renseigné"}{c.secteur ? ` · ${c.secteur}` : ""}</span>
                     </div>
-                    <div className="flex flex-col gap-1 items-end shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openThisCompany(); }}
-                        className="text-xs px-2 py-1 rounded text-white" style={{ background: "#152238" }}
-                      >
-                        Ouvrir
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openThisCompany("rh"); }}
-                        className="text-xs px-2 py-1 rounded" style={{ border: "1px solid #DDD6C4", color: "#7A7460" }}
-                      >
-                        Salaires
-                      </button>
-                    </div>
+                    <span style={{ fontSize: 11, background: statut.fond, color: statut.texte, borderRadius: 999, padding: "3px 8px", whiteSpace: "nowrap" }}>{statut.libelle}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, fontSize: 12 }}>
+                    <div className="gr-sous" style={{ borderRadius: 8, padding: 8 }}><div style={{ color: "#6B7A90" }}>CA</div><div style={{ fontFamily: "ui-monospace, monospace" }}>{fmt(c.kpis.produits)}</div></div>
+                    <div className="gr-sous" style={{ borderRadius: 8, padding: 8 }}><div style={{ color: "#6B7A90" }}>Résultat</div><div style={{ fontFamily: "ui-monospace, monospace", color: c.kpis.resultat >= 0 ? "#1E7A5C" : "#A6432F" }}>{fmt(c.kpis.resultat)}</div></div>
+                    <div className="gr-sous" style={{ borderRadius: 8, padding: 8 }}><div style={{ color: "#6B7A90" }}>Salariés</div><div style={{ fontFamily: "ui-monospace, monospace" }}>{c.activeEmployeeCount || 0}</div></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={(e) => { e.stopPropagation(); ouvrirEntreprise(c); }}
+                      style={{ flex: 1, background: "#14213A", color: "#fff", border: 0, borderRadius: 8, padding: 9, fontSize: 13 }}>Ouvrir</button>
+                    <button onClick={(e) => { e.stopPropagation(); ouvrirEntreprise(c, "rh"); }}
+                      style={{ flex: 1, background: "none", border: "1px solid #DDE3EC", borderRadius: 8, padding: 9, fontSize: 13, color: "#14213A" }}>Salaires</button>
                   </div>
                 </div>
-                );
-              })}
-              {companiesData.length === 0 && (
-                <p className="text-xs" style={{ color: "#A39C87" }}>Aucune entreprise dans ce groupe pour l'instant.</p>
-              )}
-            </div>
+              );
+            })}
+            {companiesData.length === 0 && (
+              <p className="text-xs" style={{ color: "#A39C87" }}>Aucune entreprise dans ce groupe pour l'instant.</p>
+            )}
           </div>}
 
           {tab === "finances" && <>
