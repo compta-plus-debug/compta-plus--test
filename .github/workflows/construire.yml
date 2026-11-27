@@ -89,3 +89,5 @@ jobs:
           if [ -f tests/tst-lancer.mjs ]; then node tests/tst-lancer.mjs
           elif [ -f tst-lancer.mjs ]; then node tst-lancer.mjs
           else echo "Tests non installés : étape ignorée."; fi
+
+
