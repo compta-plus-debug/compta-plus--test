@@ -40,17 +40,18 @@ main .compta-groupe table thead th {
 }
 main .compta-groupe table tbody td { padding: 9px 12px; line-height: 1.4; vertical-align: middle; }
 main .compta-groupe table tbody tr:nth-child(even) { background: #FAF8F1; }
-/* Hybride — onglets (maquette D) */
-main .compta-groupe .gr-tabs { display: flex; gap: 4px; border-bottom: 1px solid #E4DFD1; margin: 0 0 20px; overflow-x: auto; }
-main .compta-groupe .gr-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font-size: 13px; color: #7A7460; white-space: nowrap; cursor: pointer; }
-main .compta-groupe .gr-tab[aria-selected="true"] { color: #152238; font-weight: 600; border-bottom-color: #C9A24B; }
-main .compta-groupe .gr-titre { color: #152238; }
-/* Fond de présentation bleu (choisi dans Paramètres) — les cartes restent blanches */
-.compta-groupe.fond-bleu { background: #14203A; border-radius: 12px; }
-.compta-groupe.fond-bleu .gr-titre { color: #EFE9DD !important; }
-.compta-groupe.fond-bleu .gr-tabs { border-bottom-color: rgba(255,255,255,.18); }
-.compta-groupe.fond-bleu .gr-tab { color: #C9D3E6; }
-.compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { color: #fff; }
+/* Hybride (maquette retenue) — fond gris clair, onglets en pastilles, cartes à bordure fine */
+main .compta-groupe { background: #F3F5F8; min-height: 100vh; }
+main .compta-groupe .grid.sm\:grid-cols-2 > div { border: 1px solid #E4E9F1; box-shadow: none; }
+main .compta-groupe .gr-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 18px; padding: 2px 0 6px; }
+main .compta-groupe .gr-tab { flex: 0 0 auto; background: #fff; border: 1px solid #DDE3EC; border-radius: 999px; padding: 8px 14px; font-size: 13px; color: #5A6B85; white-space: nowrap; cursor: pointer; }
+main .compta-groupe .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; font-weight: 600; }
+main .compta-groupe .gr-titre { color: #14213A; }
+/* Fond bleu nuit (choisi dans Paramètres) : la page passe en bleu, les cartes restent blanches */
+.compta-groupe.fond-bleu { background: #14213A; }
+.compta-groupe.fond-bleu .gr-titre { color: #EEF2F8 !important; }
+.compta-groupe.fond-bleu .gr-tab { background: transparent; border-color: #2C3D5C; color: #B9C6DA; }
+.compta-groupe.fond-bleu .gr-tab[aria-selected="true"] { background: #E0B54E; border-color: #E0B54E; color: #14213A; }
 `;
 
 function GroupDashboardModule({ groupId, groupName, groupMaxCompanies, groupPlanStatus, groupTrialEndsAt, companyId, role, showToast, onGroupRenamed, onRequestsChanged, onEnterCurrentCompany, onJumpToModule, onBackToPlatform, onSignOut }) {
