@@ -44,6 +44,15 @@ main .compta-groupe table tbody tr { border-bottom: 1px solid #EEF1F5; }
 main .compta-groupe .overflow-x-auto { border: 1px solid rgba(31, 169, 122, .45); border-radius: 12px; background: #fff; padding: 4px 12px; }
 /* Hybride (maquette retenue) — fond gris clair, onglets en pastilles, cartes à bordure fine */
 main .compta-groupe { background: #F3F5F8; min-height: 100vh; }
+/* Pleine largeur : l'espace groupe occupe tout l'écran, sans le fond vert de l'application */
+body:has(.compta-groupe), main:has(.compta-groupe) { background: #F3F5F8 !important; }
+main:has(.compta-groupe) { max-width: none !important; padding: 0 !important; }
+main .compta-groupe, main .compta-groupe.max-w-6xl { max-width: none !important; width: 100%; }
+/* Grand écran : textes et chiffres agrandis */
+@media (min-width: 1280px) { main .compta-groupe { zoom: 1.15; } }
+/* Chiffres des tableaux et des cartes en gras */
+main .compta-groupe table td { font-weight: 600; }
+main .compta-groupe [style*="ui-monospace"] { font-weight: 700; }
 main .compta-groupe .grid.sm\:grid-cols-2 > div { border: 1px solid #E4E9F1; box-shadow: none; }
 main .compta-groupe .gr-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 18px; padding: 2px 0 6px; scrollbar-width: none; }
 main .compta-groupe .gr-tabs::-webkit-scrollbar { display: none; }
