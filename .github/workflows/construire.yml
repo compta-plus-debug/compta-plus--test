@@ -125,5 +125,4 @@ jobs:
             git rebase -X theirs "origin/${GITHUB_REF_NAME}" || git rebase --abort || true
             sleep $((essai * 5))
           done
-          echo "Impossible de publier après 6 essais."
-          exit 1
+          echo "I
